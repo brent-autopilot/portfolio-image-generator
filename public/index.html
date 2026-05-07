@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fund Image Generation Machine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            surface: '#0a0a0f',
+            card: '#12121a',
+            border: '#1e1e2e',
+            accent: '#6366f1',
+            'accent-dim': '#4f46e5',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    body { background: #0a0a0f; }
+    .pulse-dot { animation: pulse-ring 1.5s ease-in-out infinite; }
+    @keyframes pulse-ring {
+      0% { opacity: 1; }
+      50% { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+    .stage-active { color: #6366f1; }
+    .stage-done { color: #22c55e; }
+    .stage-pending { color: #3f3f50; }
+    .stage-error { color: #ef4444; }
+    .fade-in { animation: fadeIn 0.4s ease-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    textarea:focus, input:focus { outline: none; box-shadow: 0 0 0 2px #6366f1; }
+  </style>
+</head>
+<body class="min-h-screen text-gray-200 font-sans">
+  <div class="max-w-5xl mx-auto px-6 py-12">
+
+    <!-- Header -->
+    <header class="mb-12">
+      <h1 class="text-3xl font-bold tracking-tight text-white">Fund Image Generation Machine</h1>
+      <p class="mt-2 text-gray-500 text-sm">Claude Sonnet &rarr; Midjourney &rarr; Clog QC</p>
+    </header>
+
+    <!-- Input Form -->
+    <section id="form-section" class="bg-card border border-border rounded-xl p-6 mb-8">
+      <div class="mb-5">
+        <label for="fund-name" class="block text-sm font-medium text-gray-400 mb-2">Fund Name / Thesis</label>
+        <input
+          id="fund-name"
+          type="text"
+          placeholder='e.g. "Hedge the AI Bubble" or "Voyage Fund — long-only deep-sea mining equities"'
+          class="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white placeholder-gray-600 text-sm"
+        />
+      </div>
+
+      <div class="mb-5">
+        <label for="style-json" class="block text-sm font-medium text-gray-400 mb-2">
+          Visual Style JSON <span class="text-gray-600">(optional)</span>
+        </label>
+        <textarea
+          id="style-json"
+          rows="6"
+          placeholder="Paste an art direction JSON object here, or leave blank for Claude to choose the atmosphere."
+          class="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white placeholder-gray-600 text-sm font-mono"
+        ></textarea>
+      </div>
+
+      <button
+        id="generate-btn"
+        class="bg-accent hover:bg-accent-dim text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
+      >
+        Generate Images
+      </button>
+    </section>
+
+    <!-- Pipeline Status -->
+    <section id="pipeline-section" class="hidden mb-8 fade-in">
+      <div class="bg-card border border-border rounded-xl p-6">
+        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Pipeline Status</h2>
+        <div class="flex items-center gap-6 text-sm">
+          <div id="stage-theme" class="flex items-center gap-2 stage-pending">
+            <span class="w-2 h-2 rounded-full bg-current"></span>
+            <span>Theme Generation</span>
+          </div>
+          <span class="text-gray-700">&rarr;</span>
+          <div id="stage-mj" class="flex items-center gap-2 stage-pending">
+            <span class="w-2 h-2 rounded-full bg-current"></span>
+            <span>Midjourney</span>
+          </div>
+          <span class="text-gray-700">&rarr;</span>
+          <div id="stage-qc" class="flex items-center gap-2 stage-pending">
+            <span class="w-2 h-2 rounded-full bg-current"></span>
+            <span>Clog QC</span>
+          </div>
+        </div>
+
+        <!-- Theme prompt preview -->
+        <div id="theme-preview" class="hidden mt-5 p-4 bg-surface rounded-lg border border-border">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Generated Prompt</h3>
+          <p id="theme-text" class="text-sm text-gray-300 font-mono leading-relaxed whitespace-pre-wrap"></p>
+        </div>
+
+        <!-- Error display -->
+        <div id="error-display" class="hidden mt-5 p-4 bg-red-950/30 border border-red-900/50 rounded-lg">
+          <p id="error-text" class="text-sm text-red-400"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Approved Images -->
+    <section id="approved-section" class="hidden mb-8 fade-in">
+      <div class="bg-card border border-border rounded-xl p-6">
+        <h2 class="text-sm font-semibold text-green-400 uppercase tracking-wider mb-4">Approved Images</h2>
+        <div id="approved-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+      </div>
+    </section>
+
+    <!-- Rejected Images -->
+    <section id="rejected-section" class="hidden mb-8 fade-in">
+      <details class="bg-card border border-border rounded-xl">
+        <summary class="p-6 cursor-pointer text-sm font-semibold text-red-400 uppercase tracking-wider">
+          Rejected Images <span id="rejected-count" class="text-gray-600 normal-case font-normal"></span>
+        </summary>
+        <div id="rejected-grid" class="p-6 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+      </details>
+    </section>
+
+  </div>
+
+  <script>
+    const fundNameInput = document.getElementById('fund-name');
+    const styleJsonInput = document.getElementById('style-json');
+    const generateBtn = document.getElementById('generate-btn');
+    const pipelineSection = document.getElementById('pipeline-section');
+    const stageTheme = document.getElementById('stage-theme');
+    const stageMj = document.getElementById('stage-mj');
+    const stageQc = document.getElementById('stage-qc');
+    const themePreview = document.getElementById('theme-preview');
+    const themeText = document.getElementById('theme-text');
+    const errorDisplay = document.getElementById('error-display');
+    const errorText = document.getElementById('error-text');
+    const approvedSection = document.getElementById('approved-section');
+    const approvedGrid = document.getElementById('approved-grid');
+    const rejectedSection = document.getElementById('rejected-section');
+    const rejectedGrid = document.getElementById('rejected-grid');
+    const rejectedCount = document.getElementById('rejected-count');
+
+    function setStage(el, state) {
+      el.className = el.className.replace(/stage-\w+/, `stage-${state}`);
+      const dot = el.querySelector('span');
+      if (state === 'active') dot.classList.add('pulse-dot');
+      else dot.classList.remove('pulse-dot');
+    }
+
+    function resetUI() {
+      pipelineSection.classList.add('hidden');
+      approvedSection.classList.add('hidden');
+      rejectedSection.classList.add('hidden');
+      themePreview.classList.add('hidden');
+      errorDisplay.classList.add('hidden');
+      approvedGrid.innerHTML = '';
+      rejectedGrid.innerHTML = '';
+      setStage(stageTheme, 'pending');
+      setStage(stageMj, 'pending');
+      setStage(stageQc, 'pending');
+    }
+
+    function updateStages(stage) {
+      const map = {
+        queued: ['pending', 'pending', 'pending'],
+        generating_theme: ['active', 'pending', 'pending'],
+        generating_images: ['done', 'active', 'pending'],
+        qc_check: ['done', 'done', 'active'],
+        complete: ['done', 'done', 'done'],
+        error: ['error', 'error', 'error'],
+      };
+      const [t, m, q] = map[stage] || ['pending', 'pending', 'pending'];
+      setStage(stageTheme, t);
+      setStage(stageMj, m);
+      setStage(stageQc, q);
+    }
+
+    function renderImageCard(img, isApproved) {
+      const card = document.createElement('div');
+      card.className = 'rounded-lg overflow-hidden border border-border bg-surface';
+      card.innerHTML = `
+        <img src="${img.url}" alt="Generated image" class="w-full aspect-square object-cover" loading="lazy" />
+        <div class="p-3">
+          ${img.score != null ? `<span class="text-xs font-mono ${isApproved ? 'text-green-400' : 'text-red-400'}">${img.score}/10</span>` : ''}
+          <span class="text-xs font-mono text-gray-500 ml-2">${img.verdict}</span>
+          ${img.reason ? `<p class="text-xs text-gray-500 mt-1 line-clamp-3">${img.reason}</p>` : ''}
+        </div>
+      `;
+      return card;
+    }
+
+    async function startGeneration() {
+      const fundName = fundNameInput.value.trim();
+      if (!fundName) {
+        fundNameInput.focus();
+        return;
+      }
+
+      let styleJson = null;
+      const rawJson = styleJsonInput.value.trim();
+      if (rawJson) {
+        try {
+          styleJson = JSON.parse(rawJson);
+        } catch {
+          alert('Invalid JSON in the style field. Fix it or leave it blank.');
+          return;
+        }
+      }
+
+      resetUI();
+      pipelineSection.classList.remove('hidden');
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Running...';
+      generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fundName, styleJson }),
+        });
+        const { jobId } = await res.json();
+
+        await pollJob(jobId);
+      } catch (err) {
+        errorDisplay.classList.remove('hidden');
+        errorText.textContent = err.message;
+        updateStages('error');
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate Images';
+        generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    async function pollJob(jobId) {
+      const POLL_MS = 2000;
+
+      while (true) {
+        await new Promise((r) => setTimeout(r, POLL_MS));
+
+        const statusRes = await fetch(`/api/status/${jobId}`);
+        const status = await statusRes.json();
+
+        updateStages(status.stage);
+
+        if (status.themePrompt && themePreview.classList.contains('hidden')) {
+          themePreview.classList.remove('hidden');
+          themeText.textContent = status.themePrompt;
+        }
+
+        if (status.stage === 'error') {
+          errorDisplay.classList.remove('hidden');
+          errorText.textContent = status.error;
+          return;
+        }
+
+        if (status.stage === 'complete') {
+          const resultsRes = await fetch(`/api/results/${jobId}`);
+          const results = await resultsRes.json();
+
+          if (results.approvedImages.length > 0) {
+            approvedSection.classList.remove('hidden');
+            results.approvedImages.forEach((img) => {
+              approvedGrid.appendChild(renderImageCard(img, true));
+            });
+          }
+
+          if (results.rejectedImages.length > 0) {
+            rejectedSection.classList.remove('hidden');
+            rejectedCount.textContent = `(${results.rejectedImages.length})`;
+            results.rejectedImages.forEach((img) => {
+              rejectedGrid.appendChild(renderImageCard(img, false));
+            });
+          }
+
+          return;
+        }
+      }
+    }
+
+    generateBtn.addEventListener('click', startGeneration);
+
+    fundNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') startGeneration();
+    });
+  </script>
+</body>
+</html>
