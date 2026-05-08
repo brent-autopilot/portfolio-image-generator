@@ -1,29 +1,126 @@
 import 'dotenv/config';
 import express from 'express';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'fs';
+import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { pipeline as streamPipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
+import os from 'os';
 import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json());
-app.use(express.static(join(__dirname, 'public')));
+
+app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT || 3000;
-const LEGNEXT_BASE = 'https://api.legnext.ai/api/v1';
-const NUM_CONCEPTS = 3;
+const SITE_PASSWORD = process.env.SITE_PASSWORD || 'autopilot';
 
 // ---------------------------------------------------------------------------
-// Prompts
+// Auth — simple password gate with HMAC session token
+// ---------------------------------------------------------------------------
+const AUTH_SECRET = process.env.AUTH_SECRET || crypto.randomBytes(32).toString('hex');
+
+function makeToken(password) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(password).digest('hex');
+}
+
+const VALID_TOKEN = makeToken(SITE_PASSWORD);
+
+function parseCookies(header) {
+  const cookies = {};
+  if (!header) return cookies;
+  header.split(';').forEach((c) => {
+    const [k, ...v] = c.trim().split('=');
+    if (k) cookies[k.trim()] = v.join('=').trim();
+  });
+  return cookies;
+}
+
+function isAuthed(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies.auth_token || '';
+  if (token.length !== VALID_TOKEN.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(VALID_TOKEN));
+  } catch {
+    return false;
+  }
+}
+
+app.post('/api/auth', (req, res) => {
+  const { password } = req.body;
+  if (typeof password !== 'string' || password !== SITE_PASSWORD) {
+    return res.status(401).json({ error: 'Wrong password' });
+  }
+  res.setHeader('Set-Cookie', `auth_token=${VALID_TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400`);
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/check', (req, res) => {
+  res.json({ authed: isAuthed(req) });
+});
+
+// Serve static files (login page is always accessible)
+app.use(express.static(join(__dirname, 'public')));
+
+// Protect all other API routes
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth')) return next();
+  if (!isAuthed(req)) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+});
+
+const LEGNEXT_BASE = 'https://api.legnext.ai/api/v1';
+const NUM_CONCEPTS = 3;
+const JOB_TTL_MS = 30 * 60 * 1000;
+const JOB_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
+const MAX_POLL_ATTEMPTS = 60;
+const POLL_INTERVAL_MS = 5000;
+
+// ---------------------------------------------------------------------------
+// Lazy Anthropic client — initialized on first use so env vars are resolved
+// at request time, not module load time (critical for Vercel cold starts)
+// ---------------------------------------------------------------------------
+let _anthropic = null;
+function getAnthropic() {
+  if (!_anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+    }
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return _anthropic;
+}
+
+// ---------------------------------------------------------------------------
+// Prompts + Style Bank
 // ---------------------------------------------------------------------------
 const visualThesisPrompt = readFileSync(
   join(__dirname, 'prompts', 'visual-thesis.md'),
   'utf-8'
 );
+
+function loadStyleBank() {
+  const raw = readFileSync(join(__dirname, 'prompts', 'style-bank.md'), 'utf-8');
+  return raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && /^[a-zA-Z]/.test(l));
+}
+
+const STYLE_BANK = loadStyleBank();
+
+function pickRandomStyles(count) {
+  const pool = [...STYLE_BANK];
+  const picks = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picks.push(pool.splice(idx, 1)[0]);
+  }
+  return picks;
+}
 
 function loadClogPrompt() {
   try {
@@ -36,7 +133,6 @@ function loadClogPrompt() {
   }
 }
 
-// Extract just the system prompt block from the visual-thesis markdown
 function extractSystemPrompt(md) {
   const match = md.match(/```\n([\s\S]*?)```/);
   return match ? match[1].trim() : md;
@@ -45,18 +141,20 @@ function extractSystemPrompt(md) {
 const THEME_SYSTEM_PROMPT = extractSystemPrompt(visualThesisPrompt);
 
 // ---------------------------------------------------------------------------
-// In-memory job store
+// In-memory job store with TTL-based pruning
 // ---------------------------------------------------------------------------
 const jobs = new Map();
 
-function createJob(fundName, fundThesis, styleJson) {
+function createJob(fundName, fundThesis, styleJson, useStyleBank = true) {
   const id = crypto.randomUUID();
   const job = {
     id,
     fundName,
     fundThesis,
     styleJson,
+    useStyleBank,
     stage: 'queued',
+    assignedStyles: [],
     concepts: [],
     mjTaskIds: [],
     rawImages: [],
@@ -69,34 +167,63 @@ function createJob(fundName, fundThesis, styleJson) {
   return job;
 }
 
+function pruneExpiredJobs() {
+  const cutoff = Date.now() - JOB_TTL_MS;
+  for (const [id, job] of jobs) {
+    if (job.createdAt < cutoff) jobs.delete(id);
+  }
+}
+
+const pruneTimer = setInterval(pruneExpiredJobs, JOB_PRUNE_INTERVAL_MS);
+pruneTimer.unref();
+
 // ---------------------------------------------------------------------------
 // Stage 1 — Claude Sonnet: generate 3 distinct 15-word image prompts
 // ---------------------------------------------------------------------------
 async function generateThemes(job) {
   job.stage = 'generating_theme';
 
-  const anthropic = new Anthropic();
-
   const styleContext = job.styleJson
     ? `\n\nUse this visual style JSON for atmospheric tone only:\n${JSON.stringify(job.styleJson, null, 2)}`
     : '';
 
-  const resp = await anthropic.messages.create({
+  const thesis = job.fundThesis || job.fundName;
+
+  let styleParagraph = '';
+  if (job.useStyleBank) {
+    const styles = pickRandomStyles(NUM_CONCEPTS);
+    job.assignedStyles = styles;
+    console.log(`[job ${job.id}] Assigned styles:`, styles);
+
+    const styleDirectives = styles
+      .map((s, i) => `  Concept ${i + 1} style: "${s}"`)
+      .join('\n');
+
+    styleParagraph = `\n\nEach concept has been assigned a mandatory visual style. You MUST incorporate the assigned style into the prompt for that concept — it defines the artistic treatment, medium, or technique for the image:\n\n${styleDirectives}\n\nThe style must be baked into the prompt itself, not appended as a tag.`;
+  } else {
+    console.log(`[job ${job.id}] Style bank disabled`);
+  }
+
+  const styleReturnField = job.useStyleBank
+    ? '\n- "style": the assigned style directive (echo it back exactly)'
+    : '';
+
+  const resp = await getAnthropic().messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 1024,
     system: THEME_SYSTEM_PROMPT,
     messages: [
       {
         role: 'user',
-        content: `**FUND NAME:** ${job.fundName}\n**FUND THESIS:** ${job.fundThesis || job.fundName}${styleContext}
+        content: `**FUND NAME:** ${job.fundName}\n**FUND THESIS:** ${thesis}${styleContext}
 
-Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.
+Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.${styleParagraph}
 
 CRITICAL CONSTRAINT: Each prompt must be 15 words or fewer. Write tight, vivid, cinematic descriptions. No filler words. Every word earns its place.
 
 Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
 - "concept": a 2-3 word label for the concept
-- "prompt": the image generation prompt (15 words max)
+- "prompt": the image generation prompt (15 words max)${styleReturnField}
 
 Return ONLY the JSON array, no other text.`,
       },
@@ -114,6 +241,10 @@ Return ONLY the JSON array, no other text.`,
     concepts = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
   } catch {
     throw new Error(`Failed to parse Claude response as JSON: ${raw.slice(0, 200)}`);
+  }
+
+  if (!Array.isArray(concepts)) {
+    throw new Error(`Claude returned non-array: ${raw.slice(0, 200)}`);
   }
 
   const valid = concepts
@@ -135,6 +266,9 @@ Return ONLY the JSON array, no other text.`,
 // Stage 2 — LegNext.ai / Midjourney
 // ---------------------------------------------------------------------------
 async function submitMidjourneyJob(prompt) {
+  const apiKey = process.env.LEGNEXT_API_KEY;
+  if (!apiKey) throw new Error('LEGNEXT_API_KEY not configured');
+
   const pTag = process.env.P_TAG || '';
   const fullPrompt = pTag ? `${prompt} ${pTag}` : prompt;
 
@@ -142,13 +276,20 @@ async function submitMidjourneyJob(prompt) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': process.env.LEGNEXT_API_KEY,
+      'x-api-key': apiKey,
     },
     body: JSON.stringify({ text: fullPrompt }),
   });
 
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let msg = `LegNext diffusion returned HTTP ${res.status}`;
+    try { const j = JSON.parse(text); msg = j.error?.message || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
+
   const data = await res.json();
-  if (!res.ok || (data.error && data.error.code !== 0)) {
+  if (data.error && data.error.code !== 0) {
     throw new Error(data.error?.message || data.message || 'LegNext diffusion request failed');
   }
   return data.job_id;
@@ -166,10 +307,7 @@ async function fetchMidjourneyResult(jobId) {
 }
 
 async function pollSingleJob(jobId) {
-  const MAX_ATTEMPTS = 60;
-  const POLL_INTERVAL_MS = 5000;
-
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     const result = await fetchMidjourneyResult(jobId);
 
@@ -217,6 +355,7 @@ async function generateAllImages(job) {
         url,
         concept: t.concept.concept,
         prompt: t.concept.prompt,
+        style: t.concept.style || null,
       }))
     )
   );
@@ -254,11 +393,18 @@ async function runClogCheck(job) {
   }
 
   job.stage = 'qc_check';
-  const anthropic = new Anthropic();
 
-  const checks = job.rawImages.map(async (img) => {
-    try {
-      const resp = await anthropic.messages.create({
+  const results = await Promise.allSettled(
+    job.rawImages.map(async (img) => {
+      const imgRes = await fetch(img.url);
+      if (!imgRes.ok) throw new Error(`Failed to download image for QC: HTTP ${imgRes.status}`);
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      const base64 = buf.toString('base64');
+
+      const contentType = imgRes.headers.get('content-type') || 'image/png';
+      const mediaType = contentType.split(';')[0].trim();
+
+      const resp = await getAnthropic().messages.create({
         model: QC_MODEL,
         max_tokens: 10,
         system: clogPrompt,
@@ -268,7 +414,7 @@ async function runClogCheck(job) {
             content: [
               {
                 type: 'image',
-                source: { type: 'url', url: img.url },
+                source: { type: 'base64', media_type: mediaType, data: base64 },
               },
             ],
           },
@@ -282,25 +428,34 @@ async function runClogCheck(job) {
         .trim();
 
       const verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
+      return { ...img, verdict };
+    })
+  );
 
-      const entry = { ...img, verdict };
+  const approved = [];
+  const rejected = [];
 
-      if (verdict === 'PASS') {
-        job.approvedImages.push(entry);
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (result.status === 'fulfilled') {
+      if (result.value.verdict === 'PASS') {
+        approved.push(result.value);
       } else {
-        job.rejectedImages.push(entry);
+        rejected.push(result.value);
       }
-    } catch (err) {
-      console.error(`[job ${job.id}] QC error for ${img.concept}:`, err.message);
-      job.rejectedImages.push({
-        ...img,
+    } else {
+      const failedImg = job.rawImages[i];
+      console.error(`[job ${job.id}] QC error for ${failedImg?.concept}:`, result.reason?.message);
+      rejected.push({
+        ...failedImg,
         verdict: 'ERROR',
-        reason: err.message,
+        reason: result.reason?.message || 'QC check failed',
       });
     }
-  });
+  }
 
-  await Promise.all(checks);
+  job.approvedImages = approved;
+  job.rejectedImages = rejected;
   job.stage = 'complete';
 }
 
@@ -326,10 +481,17 @@ async function runPipeline(job) {
 // Routes
 // ---------------------------------------------------------------------------
 app.post('/api/generate', (req, res) => {
-  const { fundName, fundThesis, styleJson } = req.body;
-  if (!fundName) return res.status(400).json({ error: 'fundName is required' });
+  const { fundName, fundThesis, styleJson, useStyleBank } = req.body;
 
-  const job = createJob(fundName, fundThesis || '', styleJson || null);
+  const name = typeof fundName === 'string' ? fundName.trim() : '';
+  if (!name) return res.status(400).json({ error: 'fundName is required' });
+  if (name.length > 200) return res.status(400).json({ error: 'fundName too long' });
+
+  const thesis = typeof fundThesis === 'string' ? fundThesis.trim() : '';
+  if (thesis.length > 2000) return res.status(400).json({ error: 'fundThesis too long' });
+
+  const styleBankEnabled = useStyleBank === true || useStyleBank === undefined;
+  const job = createJob(name, thesis, styleJson || null, styleBankEnabled);
   runPipeline(job);
 
   res.json({ jobId: job.id, stage: job.stage });
@@ -342,6 +504,10 @@ app.get('/api/status/:jobId', (req, res) => {
   res.json({
     jobId: job.id,
     stage: job.stage,
+    fundName: job.fundName,
+    fundThesis: job.fundThesis,
+    useStyleBank: job.useStyleBank,
+    assignedStyles: job.assignedStyles,
     concepts: job.concepts,
     mjTaskIds: job.mjTaskIds,
     rawImageCount: job.rawImages.length,
@@ -359,6 +525,9 @@ app.get('/api/results/:jobId', (req, res) => {
     jobId: job.id,
     stage: job.stage,
     fundName: job.fundName,
+    fundThesis: job.fundThesis,
+    useStyleBank: job.useStyleBank,
+    assignedStyles: job.assignedStyles,
     concepts: job.concepts,
     approvedImages: job.approvedImages,
     rejectedImages: job.rejectedImages,
@@ -372,34 +541,56 @@ app.get('/api/results/:jobId', (req, res) => {
 // ---------------------------------------------------------------------------
 const ARCHIVE_DIR = join(__dirname, 'archive');
 const HISTORY_FILE = join(ARCHIVE_DIR, 'history.json');
+const DOWNLOADS_DIR = join(os.homedir(), 'Downloads');
 
 if (!existsSync(ARCHIVE_DIR)) mkdirSync(ARCHIVE_DIR, { recursive: true });
 
+let historyCache = null;
+
 function loadHistory() {
+  if (historyCache) return historyCache;
   try {
-    return JSON.parse(readFileSync(HISTORY_FILE, 'utf-8'));
+    historyCache = JSON.parse(readFileSync(HISTORY_FILE, 'utf-8'));
   } catch {
-    return [];
+    historyCache = [];
   }
+  return historyCache;
 }
 
 function saveHistory(entries) {
+  historyCache = entries;
   writeFileSync(HISTORY_FILE, JSON.stringify(entries, null, 2));
 }
 
 async function archiveImage(img, fundName, jobId) {
   const ts = Date.now();
-  const slug = (img.concept || 'image').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  const filename = `${ts}-${slug}.png`;
+  const uniqueId = crypto.randomUUID().slice(0, 8);
+  const slug = (img.concept || 'image').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60);
+  const filename = `${ts}-${uniqueId}-${slug}.png`;
   const filepath = join(ARCHIVE_DIR, filename);
 
   try {
     const res = await fetch(img.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.body) throw new Error('Empty response body');
     await streamPipeline(res.body, createWriteStream(filepath));
   } catch (err) {
     console.error(`[archive] Failed to download ${img.url}:`, err.message);
     return null;
+  }
+
+  try {
+    const dlBase = `${fundName.replace(/[^a-z0-9]+/gi, '-')}-${slug}`;
+    let dlFilename = `${dlBase}.png`;
+    let version = 1;
+    while (existsSync(join(DOWNLOADS_DIR, dlFilename)) && version < 1000) {
+      version++;
+      dlFilename = `${dlBase}-${version}.png`;
+    }
+    copyFileSync(filepath, join(DOWNLOADS_DIR, dlFilename));
+    console.log(`[archive] Saved to Downloads: ${dlFilename}`);
+  } catch (err) {
+    console.error(`[archive] Failed to copy to Downloads:`, err.message);
   }
 
   const entry = {
@@ -408,6 +599,7 @@ async function archiveImage(img, fundName, jobId) {
     fundName,
     concept: img.concept || null,
     prompt: img.prompt || null,
+    style: img.style || null,
     verdict: img.verdict || null,
     originalUrl: img.url,
     filename,
@@ -423,9 +615,9 @@ async function archiveImage(img, fundName, jobId) {
 
 async function archiveJobImages(job) {
   const allImages = [...job.approvedImages, ...job.rejectedImages];
-  await Promise.allSettled(
-    allImages.map((img) => archiveImage(img, job.fundName, job.id))
-  );
+  for (const img of allImages) {
+    await archiveImage(img, job.fundName, job.id);
+  }
 }
 
 app.get('/api/history', (_req, res) => {
@@ -434,15 +626,32 @@ app.get('/api/history', (_req, res) => {
 });
 
 app.get('/api/archive/:filename', (req, res) => {
-  const filepath = join(ARCHIVE_DIR, req.params.filename);
+  const requested = req.params.filename;
+  const safe = basename(requested);
+  if (safe !== requested || !requested) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+
+  const filepath = join(ARCHIVE_DIR, safe);
   if (!existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
-  res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
+  const sanitizedName = safe.replace(/["\r\n]/g, '_');
+  res.setHeader('Content-Disposition', `attachment; filename="${sanitizedName}"`);
   res.sendFile(filepath);
 });
 
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Fund Image Gen running at http://localhost:${PORT}`);
 });
+
+function shutdown() {
+  console.log('\nShutting down...');
+  clearInterval(pruneTimer);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

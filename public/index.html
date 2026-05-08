@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>The Money Machine</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='42' fill='%23ffffff'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23fff'/><stop offset='1' stop-color='%23999'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='%230a0a0f'/><rect x='4' y='4' width='92' height='92' rx='18' fill='none' stroke='%23333' stroke-width='1.5'/><path d='M25 72V32l25 24 25-24v40' fill='none' stroke='url(%23g)' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/><circle cx='50' cy='28' r='4' fill='%23fff' opacity='.6'/></svg>" />
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,8 +13,6 @@
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --accent: #ffffff;
-      --accent-glow: rgba(255, 255, 255, 0.2);
       --pass: #34d399;
       --fail: #f87171;
       --glass-bg: rgba(255, 255, 255, 0.06);
@@ -278,6 +276,54 @@
       box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
     }
 
+    /* Style bank toggle */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .toggle-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      user-select: none;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .toggle-label.active { color: rgba(255,255,255,0.7); }
+    .toggle-track {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.25s, border-color 0.25s;
+    }
+    .toggle-track.on {
+      background: rgba(255,255,255,0.2);
+      border-color: rgba(255,255,255,0.3);
+    }
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: rgba(255,255,255,0.4);
+      border-radius: 50%;
+      transition: transform 0.25s, background 0.25s;
+    }
+    .toggle-track.on .toggle-thumb {
+      transform: translateX(16px);
+      background: #fff;
+    }
+
     /* Generate button */
     .generate-btn {
       margin-top: 20px;
@@ -442,7 +488,21 @@
     }
     .concept-num { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.5); width: 20px; flex-shrink: 0; }
     .concept-label { font-size: 15px; font-weight: 700; color: var(--text); }
-    .concept-prompt { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-left: auto; max-width: 50%; text-align: right; flex-shrink: 0; }
+    .concept-style {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--pass);
+      background: rgba(52,211,153,0.08);
+      border: 1px solid rgba(52,211,153,0.15);
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+      flex-shrink: 0;
+    }
+    .concept-prompt { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-left: auto; max-width: 40%; text-align: right; flex-shrink: 0; }
 
     /* Error */
     .error-bar {
@@ -505,6 +565,13 @@
     .image-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
     .image-card-info { padding: 18px 20px; }
     .image-card-concept { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .image-card-style {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--pass);
+      margin-bottom: 6px;
+      opacity: 0.7;
+    }
     .image-card-prompt { font-family: var(--mono); font-size: 10px; color: var(--text-dim); line-height: 1.5; margin-bottom: 12px; }
     .image-card-actions { display: flex; align-items: center; gap: 10px; }
     .verdict-tag {
@@ -601,12 +668,111 @@
     .download-btn:active { transform: scale(0.95); }
     .history-empty { color: var(--text-dim); font-size: 13px; padding: 40px 0; text-align: center; }
 
-    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    /* Login gate */
+    .login-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(5, 5, 8, 0.95);
+      backdrop-filter: blur(20px);
+      animation: fadeIn 0.4s ease-out;
+    }
+    .login-gate.hidden { display: none; }
+    .login-card {
+      width: 380px;
+      max-width: calc(100vw - 48px);
+      padding: 48px 40px;
+      border-radius: 24px;
+      text-align: center;
+      animation: modalIn 0.5s ease-out;
+    }
+    .login-title {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.6) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .login-sub {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      margin-bottom: 36px;
+    }
+    .login-input {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 16px;
+      font-weight: 500;
+      padding: 16px 20px;
+      text-align: center;
+      letter-spacing: 4px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .login-input::placeholder { color: rgba(255,255,255,0.15); letter-spacing: 1px; }
+    .login-input:focus {
+      outline: none;
+      border-color: rgba(255,255,255,0.3);
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
+    }
+    .login-input.login-error {
+      border-color: var(--fail);
+      animation: loginShake 0.4s ease-out;
+    }
+    @keyframes loginShake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+    .login-btn {
+      width: 100%;
+      margin-top: 16px;
+      background: #fff;
+      color: #0a0a0f;
+      border: none;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      padding: 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.12s, box-shadow 0.3s;
+      box-shadow: 0 4px 24px rgba(255,255,255,0.1);
+    }
+    .login-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 32px rgba(255,255,255,0.15); }
+    .login-btn:active { transform: scale(0.97); }
+    .login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .login-dot {
+      width: 10px; height: 10px;
+      background: #fff;
+      border-radius: 50%;
+      display: inline-block;
+      margin-bottom: 24px;
+      box-shadow: 0 0 20px rgba(255,255,255,0.25), 0 0 60px rgba(255,255,255,0.15);
+      animation: dot-glow 3s ease-in-out infinite;
+    }
 
     @media (max-width: 768px) {
       .input-grid { grid-template-columns: 1fr; border-radius: 16px; }
-      .input-main { border-radius: 16px 16px 0 0; }
-      .input-side { border-radius: 0 0 16px 16px; }
+      .input-name { border-radius: 16px 16px 0 0; }
+      .input-thesis { border-radius: 0; }
+      .input-bottom { flex-direction: column; border-radius: 0 0 16px 16px; }
+      .input-bottom .btn-wrap { width: 100%; }
       .image-grid { grid-template-columns: 1fr; }
       .history-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
       .header h1 { font-size: 36px; }
@@ -618,10 +784,21 @@
   </style>
 </head>
 <body>
+  <!-- Login gate -->
+  <div id="login-gate" class="login-gate">
+    <div class="login-card glass glass-glow">
+      <div class="login-dot"></div>
+      <div class="login-title">The Money Machine</div>
+      <div class="login-sub">Enter password to continue</div>
+      <input id="login-password" type="password" class="login-input" placeholder="Password" autocomplete="off" />
+      <button id="login-btn" class="login-btn">Enter</button>
+    </div>
+  </div>
+
   <div class="bg-layer" id="bg-layer"></div>
   <div class="bg-noise"></div>
 
-  <div class="container">
+  <div class="container" id="main-container" style="display:none">
 
     <div class="header">
       <div><h1><span class="header-dot"></span>The Money Machine</h1></div>
@@ -646,6 +823,12 @@
           <textarea id="style-json" class="style-textarea" placeholder='{ "visual_style": { ... } }'></textarea>
         </div>
         <div class="btn-wrap">
+          <div class="toggle-row">
+            <div id="style-bank-toggle" class="toggle-track on" role="switch" aria-checked="true" tabindex="0">
+              <div class="toggle-thumb"></div>
+            </div>
+            <span id="style-bank-label" class="toggle-label active">Style Bank</span>
+          </div>
           <button id="generate-btn" class="generate-btn">Generate</button>
         </div>
       </div>
@@ -697,10 +880,77 @@
   </div>
 
   <script>
+    // Auth gate
+    const loginGate = document.getElementById('login-gate');
+    const loginPassword = document.getElementById('login-password');
+    const loginBtn = document.getElementById('login-btn');
+    const mainContainer = document.getElementById('main-container');
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/check');
+        const data = await res.json();
+        if (data.authed) unlockApp();
+      } catch {}
+    }
+
+    function unlockApp() {
+      loginGate.classList.add('hidden');
+      mainContainer.style.display = '';
+    }
+
+    async function attemptLogin() {
+      const pw = loginPassword.value;
+      if (!pw) { loginPassword.focus(); return; }
+      loginBtn.disabled = true;
+      loginBtn.textContent = '...';
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw }),
+        });
+        if (res.ok) {
+          unlockApp();
+        } else {
+          loginPassword.classList.add('login-error');
+          loginPassword.value = '';
+          loginPassword.focus();
+          setTimeout(() => loginPassword.classList.remove('login-error'), 500);
+        }
+      } catch {
+        loginPassword.classList.add('login-error');
+        setTimeout(() => loginPassword.classList.remove('login-error'), 500);
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Enter';
+      }
+    }
+
+    loginBtn.addEventListener('click', attemptLogin);
+    loginPassword.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+    checkAuth();
+
     const bgLayer = document.getElementById('bg-layer');
     const fundNameInput = document.getElementById('fund-name');
     const fundThesisInput = document.getElementById('fund-thesis');
     const styleJsonInput = document.getElementById('style-json');
+    const styleBankToggle = document.getElementById('style-bank-toggle');
+    const styleBankLabel = document.getElementById('style-bank-label');
+    let styleBankEnabled = true;
+
+    function setStyleBankToggle(on) {
+      styleBankEnabled = on;
+      styleBankToggle.classList.toggle('on', on);
+      styleBankToggle.setAttribute('aria-checked', String(on));
+      styleBankLabel.classList.toggle('active', on);
+    }
+    styleBankToggle.addEventListener('click', () => setStyleBankToggle(!styleBankEnabled));
+    styleBankLabel.addEventListener('click', () => setStyleBankToggle(!styleBankEnabled));
+    styleBankToggle.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setStyleBankToggle(!styleBankEnabled); }
+    });
+
     const generateBtn = document.getElementById('generate-btn');
     const pipelineSection = document.getElementById('pipeline-section');
     const stageTheme = document.getElementById('stage-theme');
@@ -748,8 +998,9 @@
       });
     }
 
-    // Button ripple
+    // Button ripple (skip when disabled)
     generateBtn.addEventListener('click', (e) => {
+      if (generateBtn.disabled) return;
       const rect = generateBtn.getBoundingClientRect();
       const ripple = document.createElement('span');
       ripple.className = 'btn-ripple';
@@ -811,6 +1062,11 @@
     }
 
     function esc(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
+    function safeUrl(url) {
+      if (!url) return '';
+      try { const u = new URL(url); return ['http:', 'https:'].includes(u.protocol) ? u.href : ''; }
+      catch { return url.startsWith('/') ? encodeURI(url) : ''; }
+    }
 
     let cardCounter = 0;
     function renderImageCard(img) {
@@ -824,9 +1080,10 @@
       else if (img.verdict === 'ERROR') vc = 'verdict-error';
 
       card.innerHTML = `
-        <img src="${esc(img.url)}" alt="" loading="lazy" />
+        <img src="${safeUrl(img.url)}" alt="" loading="lazy" />
         <div class="image-card-info">
           ${img.concept ? `<div class="image-card-concept">${esc(img.concept)}</div>` : ''}
+          ${img.style ? `<div class="image-card-style">${esc(img.style)}</div>` : ''}
           ${img.prompt ? `<div class="image-card-prompt">${esc(img.prompt)}</div>` : ''}
           <div class="image-card-actions">
             <span class="verdict-tag ${vc}">${esc(img.verdict)}</span>
@@ -839,6 +1096,7 @@
     }
 
     async function startGeneration() {
+      if (generateBtn.disabled) return;
       const fundName = fundNameInput.value.trim();
       const fundThesis = fundThesisInput.value.trim();
       if (!fundName) { fundNameInput.focus(); return; }
@@ -859,10 +1117,12 @@
         const res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fundName, fundThesis, styleJson }),
+          body: JSON.stringify({ fundName, fundThesis, styleJson, useStyleBank: styleBankEnabled }),
         });
-        const { jobId } = await res.json();
-        await pollJob(jobId);
+        if (res.status === 401) { location.reload(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+        await pollJob(data.jobId);
       } catch (err) {
         errorDisplay.classList.remove('hidden');
         errorText.textContent = err.message;
@@ -874,45 +1134,80 @@
       }
     }
 
+    const MAX_POLL_ITERATIONS = 300;
+
     async function pollJob(jobId) {
-      while (true) {
+      for (let iter = 0; iter < MAX_POLL_ITERATIONS; iter++) {
         await new Promise((r) => setTimeout(r, 2000));
-        const statusRes = await fetch(`/api/status/${jobId}`);
-        const status = await statusRes.json();
+
+        let status;
+        try {
+          const statusRes = await fetch(`/api/status/${jobId}`);
+          if (statusRes.status === 401) { location.reload(); return; }
+          if (!statusRes.ok) throw new Error(`Server returned ${statusRes.status}`);
+          status = await statusRes.json();
+        } catch (err) {
+          console.warn('Poll fetch failed, retrying...', err.message);
+          continue;
+        }
+
         updateStages(status.stage);
 
         if (status.concepts?.length > 0 && conceptsPreview.classList.contains('hidden')) {
           conceptsPreview.classList.remove('hidden');
-          conceptsList.innerHTML = status.concepts.map((c, i) =>
-            `<div class="concept-row">
+          conceptsList.innerHTML = status.concepts.map((c, i) => {
+            const style = c.style || status.assignedStyles?.[i] || '';
+            return `<div class="concept-row">
               <span class="concept-num">${String(i+1).padStart(2,'0')}</span>
               <span class="concept-label">${esc(c.concept)}</span>
+              ${style ? `<span class="concept-style">${esc(style)}</span>` : ''}
               <span class="concept-prompt">${esc(c.prompt)}</span>
-            </div>`
-          ).join('');
+            </div>`;
+          }).join('');
         }
 
         if (status.stage === 'error') {
           errorDisplay.classList.remove('hidden');
-          errorText.textContent = status.error;
+          errorText.textContent = status.error || 'An unknown error occurred';
           return;
         }
 
         if (status.stage === 'complete') {
-          const resultsRes = await fetch(`/api/results/${jobId}`);
-          const results = await resultsRes.json();
-          if (results.approvedImages.length > 0) {
+          let results;
+          try {
+            const resultsRes = await fetch(`/api/results/${jobId}`);
+            if (resultsRes.status === 401) { location.reload(); return; }
+            if (!resultsRes.ok) throw new Error(`Server returned ${resultsRes.status}`);
+            results = await resultsRes.json();
+          } catch (err) {
+            errorDisplay.classList.remove('hidden');
+            errorText.textContent = `Failed to fetch results: ${err.message}`;
+            return;
+          }
+
+          if (results.approvedImages?.length > 0) {
             approvedSection.classList.remove('hidden');
             results.approvedImages.forEach((img) => approvedGrid.appendChild(renderImageCard(img)));
           }
-          if (results.rejectedImages.length > 0) {
+          if (results.rejectedImages?.length > 0) {
             rejectedSection.classList.remove('hidden');
             rejectedCount.textContent = `(${results.rejectedImages.length})`;
             results.rejectedImages.forEach((img) => rejectedGrid.appendChild(renderImageCard(img)));
+
+            if (!results.approvedImages?.length) {
+              errorDisplay.classList.remove('hidden');
+              errorText.textContent = 'All images were rejected by QC. Review below or try again.';
+              const details = rejectedSection.querySelector('details');
+              if (details) details.open = true;
+            }
           }
           return;
         }
       }
+
+      errorDisplay.classList.remove('hidden');
+      errorText.textContent = 'Polling timed out — job may still be running on the server.';
+      updateStages('error');
     }
 
     // History modal
@@ -921,6 +1216,8 @@
       historyContent.innerHTML = '<div class="history-empty">Loading...</div>';
       try {
         const res = await fetch('/api/history');
+        if (res.status === 401) { location.reload(); return; }
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const history = await res.json();
         if (history.length === 0) {
           historyContent.innerHTML = '<div class="history-empty">No images generated yet.</div>';
@@ -928,12 +1225,12 @@
         }
         historyContent.innerHTML = `<div class="history-grid">${history.map((h) => `
           <div class="history-card">
-            <img src="/api/archive/${esc(h.filename)}" alt="" loading="lazy" />
+            <img src="${safeUrl('/api/archive/' + h.filename)}" alt="" loading="lazy" />
             <div class="history-card-info">
               <div class="history-card-fund">${esc(h.fundName)}</div>
               ${h.concept ? `<div class="history-card-concept">${esc(h.concept)}</div>` : ''}
               <div class="history-card-date">${new Date(h.archivedAt).toLocaleDateString()}</div>
-              <a class="download-btn" href="/api/archive/${esc(h.filename)}" download>&#8595; Download</a>
+              <a class="download-btn" href="${safeUrl('/api/archive/' + h.filename)}" download>&#8595; Download</a>
             </div>
           </div>
         `).join('')}</div>`;
@@ -942,11 +1239,17 @@
       }
     }
 
+    function closeModal() { historyModal.classList.add('hidden'); }
+
     historyBtn.addEventListener('click', openHistory);
-    modalClose.addEventListener('click', () => historyModal.classList.add('hidden'));
-    historyModal.addEventListener('click', (e) => { if (e.target === historyModal) historyModal.classList.add('hidden'); });
+    modalClose.addEventListener('click', closeModal);
+    historyModal.addEventListener('click', (e) => { if (e.target === historyModal) closeModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !historyModal.classList.contains('hidden')) closeModal();
+    });
     generateBtn.addEventListener('click', startGeneration);
     fundNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGeneration(); });
+    fundThesisInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startGeneration(); } });
   </script>
 </body>
 </html>
