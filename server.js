@@ -1,8 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { pipeline as streamPipeline } from 'stream/promises';
+import { createWriteStream } from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 
@@ -47,11 +49,12 @@ const THEME_SYSTEM_PROMPT = extractSystemPrompt(visualThesisPrompt);
 // ---------------------------------------------------------------------------
 const jobs = new Map();
 
-function createJob(fundName, styleJson) {
+function createJob(fundName, fundThesis, styleJson) {
   const id = crypto.randomUUID();
   const job = {
     id,
     fundName,
+    fundThesis,
     styleJson,
     stage: 'queued',
     concepts: [],
@@ -85,7 +88,7 @@ async function generateThemes(job) {
     messages: [
       {
         role: 'user',
-        content: `**FUND THESIS:** ${job.fundName}${styleContext}
+        content: `**FUND NAME:** ${job.fundName}\n**FUND THESIS:** ${job.fundThesis || job.fundName}${styleContext}
 
 Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.
 
@@ -309,6 +312,9 @@ async function runPipeline(job) {
     await generateThemes(job);
     await generateAllImages(job);
     await runClogCheck(job);
+    archiveJobImages(job).catch((err) =>
+      console.error(`[job ${job.id}] Archive error:`, err.message)
+    );
   } catch (err) {
     job.stage = 'error';
     job.error = err.message;
@@ -320,10 +326,10 @@ async function runPipeline(job) {
 // Routes
 // ---------------------------------------------------------------------------
 app.post('/api/generate', (req, res) => {
-  const { fundName, styleJson } = req.body;
+  const { fundName, fundThesis, styleJson } = req.body;
   if (!fundName) return res.status(400).json({ error: 'fundName is required' });
 
-  const job = createJob(fundName, styleJson || null);
+  const job = createJob(fundName, fundThesis || '', styleJson || null);
   runPipeline(job);
 
   res.json({ jobId: job.id, stage: job.stage });
@@ -359,6 +365,79 @@ app.get('/api/results/:jobId', (req, res) => {
     rawImages: job.rawImages,
     error: job.error,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Image archive — download and persist every generated image
+// ---------------------------------------------------------------------------
+const ARCHIVE_DIR = join(__dirname, 'archive');
+const HISTORY_FILE = join(ARCHIVE_DIR, 'history.json');
+
+if (!existsSync(ARCHIVE_DIR)) mkdirSync(ARCHIVE_DIR, { recursive: true });
+
+function loadHistory() {
+  try {
+    return JSON.parse(readFileSync(HISTORY_FILE, 'utf-8'));
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(entries) {
+  writeFileSync(HISTORY_FILE, JSON.stringify(entries, null, 2));
+}
+
+async function archiveImage(img, fundName, jobId) {
+  const ts = Date.now();
+  const slug = (img.concept || 'image').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  const filename = `${ts}-${slug}.png`;
+  const filepath = join(ARCHIVE_DIR, filename);
+
+  try {
+    const res = await fetch(img.url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await streamPipeline(res.body, createWriteStream(filepath));
+  } catch (err) {
+    console.error(`[archive] Failed to download ${img.url}:`, err.message);
+    return null;
+  }
+
+  const entry = {
+    id: crypto.randomUUID(),
+    jobId,
+    fundName,
+    concept: img.concept || null,
+    prompt: img.prompt || null,
+    verdict: img.verdict || null,
+    originalUrl: img.url,
+    filename,
+    archivedAt: new Date().toISOString(),
+  };
+
+  const history = loadHistory();
+  history.unshift(entry);
+  saveHistory(history);
+
+  return entry;
+}
+
+async function archiveJobImages(job) {
+  const allImages = [...job.approvedImages, ...job.rejectedImages];
+  await Promise.allSettled(
+    allImages.map((img) => archiveImage(img, job.fundName, job.id))
+  );
+}
+
+app.get('/api/history', (_req, res) => {
+  const history = loadHistory();
+  res.json(history);
+});
+
+app.get('/api/archive/:filename', (req, res) => {
+  const filepath = join(ARCHIVE_DIR, req.params.filename);
+  if (!existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
+  res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
+  res.sendFile(filepath);
 });
 
 // ---------------------------------------------------------------------------

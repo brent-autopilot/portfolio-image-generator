@@ -3,449 +3,703 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fund Image Generation Machine</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='42' fill='%23e84225'/></svg>" />
+  <title>The Money Machine</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='42' fill='%23ffffff'/></svg>" />
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #1a1a1a;
-      --surface: #242424;
-      --surface-light: #f0ece6;
-      --surface-warm: #e8e2d8;
-      --accent: #e84225;
-      --accent-hover: #d13a1f;
-      --text: #f5f5f0;
-      --text-dim: #8a8a80;
-      --text-dark: #1a1a1a;
-      --border: #333;
-      --pass: #2ecc71;
-      --fail: #e84225;
-      --font: 'Space Grotesk', system-ui, sans-serif;
+      --accent: #ffffff;
+      --accent-glow: rgba(255, 255, 255, 0.2);
+      --pass: #34d399;
+      --fail: #f87171;
+      --glass-bg: rgba(255, 255, 255, 0.06);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --glass-highlight: rgba(255, 255, 255, 0.15);
+      --glass-shadow: rgba(0, 0, 0, 0.4);
+      --text: rgba(255, 255, 255, 0.92);
+      --text-dim: rgba(255, 255, 255, 0.4);
+      --text-mid: rgba(255, 255, 255, 0.6);
+      --font: 'Satoshi', system-ui, sans-serif;
       --mono: 'JetBrains Mono', monospace;
     }
 
     body {
-      background: var(--bg);
+      background: #050508;
       color: var(--text);
       font-family: var(--font);
       min-height: 100vh;
+      overflow-x: hidden;
       -webkit-font-smoothing: antialiased;
     }
 
-    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    /* Background with blur + parallax */
+    .bg-layer {
+      position: fixed;
+      inset: -40px;
+      z-index: 0;
+      background: url('/bg.png') center center / cover no-repeat;
+      opacity: 0.45;
+      filter: blur(1px);
+      transition: transform 0.15s ease-out;
+      will-change: transform;
+    }
+    .bg-layer::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 30% 20%, transparent 0%, rgba(5,5,8,0.5) 70%),
+        radial-gradient(ellipse at 70% 80%, transparent 0%, rgba(5,5,8,0.7) 60%);
+    }
+    .bg-noise {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      pointer-events: none;
+    }
+
+    .container {
+      position: relative;
+      z-index: 2;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* Glass */
+    .glass {
+      position: relative;
+      background: var(--glass-bg);
+      backdrop-filter: blur(40px) saturate(1.6);
+      -webkit-backdrop-filter: blur(40px) saturate(1.6);
+      border: 1px solid var(--glass-border);
+      box-shadow:
+        inset 0 1px 0 var(--glass-highlight),
+        0 8px 32px var(--glass-shadow),
+        0 0 0 0.5px rgba(255,255,255,0.05);
+      transition: border-color 0.3s, box-shadow 0.3s, transform 0.15s ease-out;
+    }
+
+    /* Animated edge glow */
+    @property --glow-angle {
+      syntax: "<angle>";
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes edgeGlow {
+      to { --glow-angle: 360deg; }
+    }
+    .glass-glow {
+      overflow: hidden;
+    }
+    .glass-glow::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: conic-gradient(
+        from var(--glow-angle),
+        transparent 0%,
+        transparent 30%,
+        rgba(255,255,255,0.35) 45%,
+        rgba(255,255,255,0.6) 50%,
+        rgba(255,255,255,0.35) 55%,
+        transparent 70%,
+        transparent 100%
+      );
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: edgeGlow 4s linear infinite;
+      animation-delay: var(--glow-delay, 0s);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .glass-tilt {
+      transform-style: preserve-3d;
+      perspective: 800px;
+    }
+    .glass-tilt:hover {
+      border-color: rgba(255,255,255,0.2);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.25),
+        0 8px 40px rgba(0,0,0,0.5),
+        0 0 40px rgba(255,255,255,0.04);
+    }
 
     /* Header */
     .header {
-      padding: 40px 0 0;
+      padding: 48px 0 24px;
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 20px;
       margin-bottom: 32px;
     }
     .header h1 {
-      font-size: 48px;
-      font-weight: 700;
-      letter-spacing: -2px;
+      font-size: 52px;
+      font-weight: 900;
+      letter-spacing: -2.5px;
       line-height: 1;
-    }
-    .header-sub {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 3px;
-      color: var(--text-dim);
+      background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.6) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .header-dot {
-      width: 12px;
-      height: 12px;
-      background: var(--accent);
+      width: 14px; height: 14px;
+      background: #fff;
       border-radius: 50%;
       display: inline-block;
-      margin-right: 8px;
+      margin-right: 10px;
+      box-shadow: 0 0 20px rgba(255,255,255,0.25), 0 0 60px rgba(255,255,255,0.15);
+      animation: dot-glow 3s ease-in-out infinite;
     }
+    @keyframes dot-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(255,255,255,0.25), 0 0 60px rgba(255,255,255,0.15); }
+      50% { box-shadow: 0 0 30px rgba(255,255,255,0.35), 0 0 90px rgba(255,255,255,0.2); }
+    }
+    .header-right { display: flex; align-items: center; gap: 24px; }
+    .header-sub {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .history-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-dim);
+      font-family: var(--font);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      transition: all 0.2s;
+    }
+    .history-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+    .history-btn:active { transform: scale(0.96); }
 
-    /* Input area */
+    /* Input */
     .input-grid {
       display: grid;
-      grid-template-columns: 1fr 340px;
-      gap: 0;
-      margin-bottom: 32px;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      margin-bottom: 24px;
+      border-radius: 20px;
     }
-    .input-main {
-      background: var(--surface-light);
-      color: var(--text-dark);
-      padding: 32px;
+    .input-name { padding: 36px; border-radius: 20px 0 0 0; }
+    .input-thesis { padding: 36px; border-radius: 0 20px 0 0; }
+    .input-thesis.glass-glow::before { animation-delay: -2s; }
+    .input-bottom {
+      grid-column: 1 / -1;
+      padding: 36px;
+      border-radius: 0 0 20px 20px;
+      display: flex;
+      gap: 24px;
+      align-items: flex-end;
     }
-    .input-side {
-      background: var(--surface);
-      padding: 32px;
-      border-left: 1px solid var(--border);
-    }
+    .input-bottom .style-wrap { flex: 1; }
+    .input-bottom .btn-wrap { flex-shrink: 0; width: 220px; }
     .input-label {
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 2.5px;
-      margin-bottom: 12px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      font-weight: 500;
+      margin-bottom: 16px;
       display: block;
     }
-    .input-label--light { color: #666; }
-    .input-label--dark { color: var(--text-dim); }
     .fund-input {
       width: 100%;
       background: transparent;
       border: none;
-      border-bottom: 2px solid #ccc;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
       font-family: var(--font);
-      font-size: 28px;
-      font-weight: 600;
+      font-size: 26px;
+      font-weight: 700;
       letter-spacing: -0.5px;
-      color: var(--text-dark);
+      color: var(--text);
       padding: 12px 0;
-      transition: border-color 0.2s;
+      transition: border-color 0.3s;
     }
-    .fund-input::placeholder { color: #bbb; }
-    .fund-input:focus { outline: none; border-color: var(--accent); }
+    .fund-input::placeholder { color: rgba(255,255,255,0.2); }
+    .fund-input:focus { outline: none; border-color: rgba(255,255,255,0.5); }
+    .thesis-textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      font-family: var(--font);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+      padding: 12px 0;
+      resize: none;
+      min-height: 60px;
+      line-height: 1.5;
+      transition: border-color 0.3s;
+    }
+    .thesis-textarea::placeholder { color: rgba(255,255,255,0.2); }
+    .thesis-textarea:focus { outline: none; border-color: rgba(255,255,255,0.5); }
     .style-textarea {
       width: 100%;
       background: rgba(255,255,255,0.04);
-      border: 1px solid var(--border);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
       color: var(--text);
       font-family: var(--mono);
       font-size: 11px;
       line-height: 1.6;
-      padding: 12px;
+      padding: 14px;
       resize: vertical;
-      min-height: 120px;
-      transition: border-color 0.2s;
+      min-height: 100px;
+      transition: border-color 0.3s, box-shadow 0.3s;
     }
-    .style-textarea::placeholder { color: #555; }
-    .style-textarea:focus { outline: none; border-color: var(--accent); }
+    .style-textarea::placeholder { color: rgba(255,255,255,0.15); }
+    .style-textarea:focus {
+      outline: none;
+      border-color: rgba(255,255,255,0.2);
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
+    }
+
+    /* Generate button */
     .generate-btn {
       margin-top: 20px;
-      background: var(--accent);
-      color: white;
+      width: 100%;
+      background: #fff;
+      color: #0a0a0f;
       border: none;
       font-family: var(--font);
-      font-size: 11px;
-      font-weight: 600;
+      font-size: 12px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 2px;
-      padding: 14px 32px;
+      letter-spacing: 3px;
+      padding: 16px 32px;
+      border-radius: 12px;
       cursor: pointer;
-      transition: background 0.2s, opacity 0.2s;
-      width: 100%;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.12s, box-shadow 0.3s, background 0.2s;
+      box-shadow: 0 4px 24px rgba(255,255,255,0.1);
     }
-    .generate-btn:hover { background: var(--accent-hover); }
-    .generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .generate-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 32px rgba(255,255,255,0.15); }
+    .generate-btn:active { transform: scale(0.97) translateY(1px); }
+    .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .generate-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .generate-btn.running {
+      background: rgba(255,255,255,0.85);
+      animation: btnPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes btnPulse {
+      0%, 100% { box-shadow: 0 4px 24px rgba(255,255,255,0.1); }
+      50% { box-shadow: 0 4px 40px rgba(255,255,255,0.2), 0 0 60px rgba(255,255,255,0.08); }
+    }
+    .btn-ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      transform: scale(0);
+      animation: ripple 0.6s ease-out;
+      pointer-events: none;
+    }
+    @keyframes ripple {
+      to { transform: scale(4); opacity: 0; }
+    }
 
     /* Pipeline */
     .pipeline {
-      background: var(--surface);
-      padding: 24px 32px;
-      margin-bottom: 32px;
+      border-radius: 16px;
+      padding: 20px 32px;
+      margin-bottom: 24px;
       display: flex;
       align-items: center;
-      gap: 0;
     }
     .pipeline.hidden { display: none; }
+    .pipeline.processing {
+      animation: glassShimmer 3s ease-in-out infinite;
+    }
+    @keyframes glassShimmer {
+      0%, 100% { box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 32px var(--glass-shadow); }
+      50% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 8px 48px rgba(0,0,0,0.5), 0 0 80px rgba(255,255,255,0.03); }
+    }
     .stage {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
+      letter-spacing: 2px;
       font-weight: 500;
+      transition: color 0.3s;
     }
     .stage-dot {
-      width: 6px;
-      height: 6px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: currentColor;
       flex-shrink: 0;
+      transition: box-shadow 0.3s;
     }
-    .stage-arrow {
-      margin: 0 20px;
-      color: #444;
-      font-size: 14px;
+    .stage-arrow { margin: 0 24px; color: rgba(255,255,255,0.12); font-size: 12px; }
+    .stage-pending { color: rgba(255,255,255,0.15); }
+    .stage-active { color: #fff; }
+    .stage-active .stage-dot {
+      animation: stagePulse 1s ease-in-out infinite;
+      box-shadow: 0 0 12px rgba(255,255,255,0.3);
     }
-    .stage-pending { color: #444; }
-    .stage-active { color: var(--accent); }
-    .stage-active .stage-dot { animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes stagePulse {
+      0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 12px rgba(255,255,255,0.3); }
+      50% { opacity: 0.4; transform: scale(1.5); box-shadow: 0 0 20px rgba(255,255,255,0.4); }
+    }
     .stage-done { color: var(--pass); }
+    .stage-done .stage-dot { box-shadow: 0 0 8px rgba(52,211,153,0.4); }
     .stage-error { color: var(--fail); }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
+
+    /* Processing spinner overlay */
+    .processing-overlay {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 24px;
+      border-radius: 14px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-mid);
+      font-weight: 500;
+      animation: slideInRight 0.4s ease-out;
     }
+    .processing-overlay.hidden { display: none; }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     /* Concepts */
     .concepts {
-      background: var(--surface);
+      border-radius: 16px;
       padding: 24px 32px;
-      margin-bottom: 32px;
-      border-left: 3px solid var(--accent);
+      margin-bottom: 24px;
+      border-left: 3px solid rgba(255,255,255,0.2);
     }
     .concepts.hidden { display: none; }
-    .concepts-title {
+    .section-title {
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 2.5px;
+      letter-spacing: 3px;
       color: var(--text-dim);
+      font-weight: 500;
       margin-bottom: 16px;
     }
     .concept-row {
       display: flex;
       align-items: baseline;
-      gap: 12px;
-      padding: 6px 0;
+      gap: 14px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      animation: fadeRow 0.3s ease-out both;
     }
-    .concept-num {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--accent);
-      flex-shrink: 0;
-      width: 16px;
+    .concept-row:last-child { border-bottom: none; }
+    .concept-row:nth-child(1) { animation-delay: 0.05s; }
+    .concept-row:nth-child(2) { animation-delay: 0.15s; }
+    .concept-row:nth-child(3) { animation-delay: 0.25s; }
+    @keyframes fadeRow {
+      from { opacity: 0; transform: translateX(-12px); }
+      to { opacity: 1; transform: translateX(0); }
     }
-    .concept-label {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-    }
-    .concept-prompt {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-dim);
-      margin-left: 8px;
-    }
+    .concept-num { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.5); width: 20px; flex-shrink: 0; }
+    .concept-label { font-size: 15px; font-weight: 700; color: var(--text); }
+    .concept-prompt { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-left: auto; max-width: 50%; text-align: right; flex-shrink: 0; }
 
     /* Error */
     .error-bar {
-      background: rgba(232, 66, 37, 0.1);
+      border-radius: 16px;
       border-left: 3px solid var(--fail);
-      padding: 16px 24px;
-      margin-bottom: 32px;
+      padding: 20px 28px;
+      margin-bottom: 24px;
       font-size: 13px;
       color: var(--fail);
+      background: rgba(248,113,113,0.08);
+      backdrop-filter: blur(24px);
     }
     .error-bar.hidden { display: none; }
 
-    /* Image grid */
+    /* Results */
     .results-section.hidden { display: none; }
     .results-header {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 16px;
+      gap: 12px;
+      margin-bottom: 20px;
     }
     .results-header h2 {
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 2.5px;
-      font-weight: 600;
+      letter-spacing: 3px;
+      font-weight: 700;
     }
     .results-header--pass h2 { color: var(--pass); }
-    .results-header--fail h2 { color: var(--text-dim); }
-    .results-line {
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
+    .results-line { flex: 1; height: 1px; background: linear-gradient(90deg, var(--glass-border), transparent); }
 
+    /* Image grid */
     .image-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 2px;
+      gap: 12px;
       margin-bottom: 40px;
     }
     .image-card {
-      background: var(--surface);
+      border-radius: 16px;
       overflow: hidden;
       position: relative;
+      animation: cardIn 0.5s ease-out both;
+      transition: transform 0.3s, box-shadow 0.3s;
     }
-    .image-card img {
-      width: 100%;
-      aspect-ratio: 1;
-      object-fit: cover;
-      display: block;
+    .image-card:hover {
+      box-shadow:
+        0 20px 60px rgba(0,0,0,0.6),
+        0 0 40px rgba(255,255,255,0.05),
+        inset 0 1px 0 rgba(255,255,255,0.25);
+      border-color: rgba(255,255,255,0.2);
     }
-    .image-card-info {
-      padding: 16px 20px;
+    .image-card:nth-child(1) { animation-delay: 0.1s; }
+    .image-card:nth-child(2) { animation-delay: 0.25s; }
+    .image-card:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(24px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
     }
-    .image-card-concept {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 4px;
-    }
-    .image-card-prompt {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text-dim);
-      line-height: 1.5;
-      margin-bottom: 10px;
-    }
+    .image-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+    .image-card-info { padding: 18px 20px; }
+    .image-card-concept { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .image-card-prompt { font-family: var(--mono); font-size: 10px; color: var(--text-dim); line-height: 1.5; margin-bottom: 12px; }
+    .image-card-actions { display: flex; align-items: center; gap: 10px; }
     .verdict-tag {
       display: inline-block;
-      font-size: 9px;
-      font-weight: 700;
+      font-size: 9px; font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      padding: 4px 10px;
+      letter-spacing: 2px;
+      padding: 5px 12px;
+      border-radius: 6px;
     }
-    .verdict-pass { background: var(--pass); color: #fff; }
-    .verdict-fail { background: var(--fail); color: #fff; }
-    .verdict-skip { background: #444; color: var(--text-dim); }
-    .verdict-error { background: #444; color: var(--fail); }
-    .image-card-reason {
-      font-size: 10px;
-      color: var(--text-dim);
-      margin-top: 8px;
-      line-height: 1.4;
-    }
+    .verdict-pass { background: rgba(52,211,153,0.15); color: var(--pass); border: 1px solid rgba(52,211,153,0.25); }
+    .verdict-fail { background: rgba(248,113,113,0.12); color: var(--fail); border: 1px solid rgba(248,113,113,0.2); }
+    .verdict-skip { background: rgba(255,255,255,0.05); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.08); }
+    .verdict-error { background: rgba(248,113,113,0.08); color: var(--fail); border: 1px solid rgba(248,113,113,0.15); }
+    .image-card-reason { font-size: 10px; color: var(--text-dim); margin-top: 10px; line-height: 1.4; }
 
-    /* Rejected toggle */
-    .rejected-toggle {
-      margin-bottom: 40px;
-    }
+    /* Rejected */
     .rejected-toggle.hidden { display: none; }
     .rejected-summary {
       cursor: pointer;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 2.5px;
-      color: var(--text-dim);
-      font-weight: 600;
-      padding: 16px 0;
-      border-top: 1px solid var(--border);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 3px;
+      color: var(--text-dim); font-weight: 600;
+      padding: 20px 0;
+      border-top: 1px solid rgba(255,255,255,0.06);
       list-style: none;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      display: flex; align-items: center; gap: 10px;
+      transition: color 0.2s;
     }
+    .rejected-summary:hover { color: var(--text-mid); }
     .rejected-summary::-webkit-details-marker { display: none; }
-    .rejected-summary::before {
-      content: '+';
-      font-size: 16px;
-      font-weight: 400;
-      color: var(--text-dim);
-      transition: transform 0.2s;
-    }
-    details[open] .rejected-summary::before {
-      content: '−';
-    }
-    .rejected-count {
-      color: #555;
-      font-weight: 400;
-    }
+    .rejected-summary::before { content: '+'; font-size: 18px; font-weight: 400; color: var(--text-dim); width: 20px; text-align: center; }
+    details[open] .rejected-summary::before { content: '\2212'; }
+    .rejected-count { color: rgba(255,255,255,0.2); font-weight: 400; }
 
-    /* Fade */
-    .fade-in { animation: fadeIn 0.5s ease-out; }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
+    /* History modal */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn 0.25s ease-out;
     }
+    .modal-overlay.hidden { display: none; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .modal {
+      width: 90%; max-width: 1000px; max-height: 80vh;
+      border-radius: 20px;
+      padding: 36px;
+      overflow-y: auto;
+      animation: modalIn 0.3s ease-out;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95) translateY(16px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 24px;
+    }
+    .modal-title { font-size: 20px; font-weight: 700; }
+    .modal-close {
+      background: none; border: none; color: var(--text-dim); font-size: 24px;
+      cursor: pointer; padding: 4px 8px; transition: color 0.2s;
+    }
+    .modal-close:hover { color: var(--text); }
+    .history-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;
+    }
+    .history-card {
+      border-radius: 12px; overflow: hidden;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      transition: border-color 0.2s;
+    }
+    .history-card:hover { border-color: rgba(255,255,255,0.15); }
+    .history-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+    .history-card-info { padding: 10px 12px; }
+    .history-card-fund { font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-card-concept { font-size: 10px; color: var(--text-dim); margin-bottom: 6px; }
+    .history-card-date { font-family: var(--mono); font-size: 9px; color: rgba(255,255,255,0.2); margin-bottom: 8px; }
+    .download-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-mid);
+      font-family: var(--font);
+      font-size: 9px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      padding: 5px 10px; border-radius: 6px;
+      cursor: pointer; text-decoration: none;
+      transition: all 0.2s;
+    }
+    .download-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.1); }
+    .download-btn:active { transform: scale(0.95); }
+    .history-empty { color: var(--text-dim); font-size: 13px; padding: 40px 0; text-align: center; }
+
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 
     @media (max-width: 768px) {
-      .input-grid { grid-template-columns: 1fr; }
-      .input-side { border-left: none; border-top: 1px solid var(--border); }
+      .input-grid { grid-template-columns: 1fr; border-radius: 16px; }
+      .input-main { border-radius: 16px 16px 0 0; }
+      .input-side { border-radius: 0 0 16px 16px; }
       .image-grid { grid-template-columns: 1fr; }
-      .header h1 { font-size: 32px; }
+      .history-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+      .header h1 { font-size: 36px; }
+      .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .header-right { align-self: flex-end; }
       .fund-input { font-size: 20px; }
+      .concept-prompt { display: none; }
     }
   </style>
 </head>
 <body>
+  <div class="bg-layer" id="bg-layer"></div>
+  <div class="bg-noise"></div>
+
   <div class="container">
 
-    <!-- Header -->
     <div class="header">
-      <div>
-        <h1><span class="header-dot"></span>Machine</h1>
+      <div><h1><span class="header-dot"></span>The Money Machine</h1></div>
+      <div class="header-right">
+        <span class="header-sub">Fund Image Generation</span>
+        <button class="history-btn" id="history-btn">Archive</button>
       </div>
-      <span class="header-sub">Fund Image Generation</span>
     </div>
 
-    <!-- Input -->
     <div class="input-grid">
-      <div class="input-main">
-        <label for="fund-name" class="input-label input-label--light">Fund Thesis</label>
-        <input
-          id="fund-name"
-          type="text"
-          class="fund-input"
-          placeholder="Hedge the AI Bubble"
-          autocomplete="off"
-        />
+      <div class="input-name glass glass-glow">
+        <label for="fund-name" class="input-label">Fund Name</label>
+        <input id="fund-name" type="text" class="fund-input" placeholder="Autopilot Alpha Fund" autocomplete="off" />
       </div>
-      <div class="input-side">
-        <label for="style-json" class="input-label input-label--dark">Style JSON</label>
-        <textarea
-          id="style-json"
-          class="style-textarea"
-          placeholder='{ "visual_style": { ... } }'
-        ></textarea>
-        <button id="generate-btn" class="generate-btn">Generate</button>
+      <div class="input-thesis glass glass-glow">
+        <label for="fund-thesis" class="input-label">Fund Thesis</label>
+        <textarea id="fund-thesis" class="thesis-textarea" placeholder="Hedge the AI Bubble with diversified short positions across overvalued tech sectors"></textarea>
+      </div>
+      <div class="input-bottom glass glass-glow">
+        <div class="style-wrap">
+          <label for="style-json" class="input-label">Style JSON</label>
+          <textarea id="style-json" class="style-textarea" placeholder='{ "visual_style": { ... } }'></textarea>
+        </div>
+        <div class="btn-wrap">
+          <button id="generate-btn" class="generate-btn">Generate</button>
+        </div>
       </div>
     </div>
 
-    <!-- Pipeline -->
-    <div id="pipeline-section" class="pipeline hidden">
-      <div id="stage-theme" class="stage stage-pending">
-        <span class="stage-dot"></span>
-        <span>Theme</span>
-      </div>
+    <div id="pipeline-section" class="pipeline glass glass-glow hidden">
+      <div id="stage-theme" class="stage stage-pending"><span class="stage-dot"></span><span>Theme</span></div>
       <span class="stage-arrow">&rarr;</span>
-      <div id="stage-mj" class="stage stage-pending">
-        <span class="stage-dot"></span>
-        <span>Midjourney</span>
-      </div>
+      <div id="stage-mj" class="stage stage-pending"><span class="stage-dot"></span><span>Midjourney</span></div>
       <span class="stage-arrow">&rarr;</span>
-      <div id="stage-qc" class="stage stage-pending">
-        <span class="stage-dot"></span>
-        <span>QC Gate</span>
-      </div>
+      <div id="stage-qc" class="stage stage-pending"><span class="stage-dot"></span><span>QC Gate</span></div>
     </div>
 
-    <!-- Concepts -->
-    <div id="concepts-preview" class="concepts hidden fade-in">
-      <div class="concepts-title">Concepts</div>
+    <div id="concepts-preview" class="concepts glass glass-glow hidden">
+      <div class="section-title">Concepts</div>
       <div id="concepts-list"></div>
     </div>
 
-    <!-- Error -->
-    <div id="error-display" class="error-bar hidden">
-      <span id="error-text"></span>
-    </div>
+    <div id="error-display" class="error-bar hidden"><span id="error-text"></span></div>
 
-    <!-- Approved -->
-    <section id="approved-section" class="results-section hidden fade-in">
-      <div class="results-header results-header--pass">
-        <h2>Passed</h2>
-        <div class="results-line"></div>
-      </div>
+    <section id="approved-section" class="results-section hidden">
+      <div class="results-header results-header--pass"><h2>Passed</h2><div class="results-line"></div></div>
       <div id="approved-grid" class="image-grid"></div>
     </section>
 
-    <!-- Rejected -->
-    <div id="rejected-section" class="rejected-toggle hidden fade-in">
+    <div id="rejected-section" class="rejected-toggle hidden">
       <details>
-        <summary class="rejected-summary">
-          Rejected <span id="rejected-count" class="rejected-count"></span>
-        </summary>
-        <div id="rejected-grid" class="image-grid" style="margin-top: 16px;"></div>
+        <summary class="rejected-summary">Rejected <span id="rejected-count" class="rejected-count"></span></summary>
+        <div id="rejected-grid" class="image-grid" style="margin-top:16px"></div>
       </details>
     </div>
+  </div>
 
+  <!-- Processing indicator -->
+  <div id="processing-overlay" class="processing-overlay glass hidden">
+    <div class="spinner"></div>
+    <span id="processing-label">Processing</span>
+  </div>
+
+  <!-- History modal -->
+  <div id="history-modal" class="modal-overlay hidden">
+    <div class="modal glass">
+      <div class="modal-header">
+        <span class="modal-title">Archive</span>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div id="history-content"></div>
+    </div>
   </div>
 
   <script>
+    const bgLayer = document.getElementById('bg-layer');
     const fundNameInput = document.getElementById('fund-name');
+    const fundThesisInput = document.getElementById('fund-thesis');
     const styleJsonInput = document.getElementById('style-json');
     const generateBtn = document.getElementById('generate-btn');
     const pipelineSection = document.getElementById('pipeline-section');
@@ -461,13 +715,64 @@
     const rejectedSection = document.getElementById('rejected-section');
     const rejectedGrid = document.getElementById('rejected-grid');
     const rejectedCount = document.getElementById('rejected-count');
+    const processingOverlay = document.getElementById('processing-overlay');
+    const processingLabel = document.getElementById('processing-label');
+    const historyBtn = document.getElementById('history-btn');
+    const historyModal = document.getElementById('history-modal');
+    const modalClose = document.getElementById('modal-close');
+    const historyContent = document.getElementById('history-content');
 
-    function setStage(el, state) {
-      el.className = `stage stage-${state}`;
+    // Background parallax
+    document.addEventListener('mousemove', (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 20;
+      const y = (e.clientY / window.innerHeight - 0.5) * 20;
+      bgLayer.style.transform = `translate(${x}px, ${y}px)`;
+    });
+
+    // Glass tile parallax + glow on hover
+    function initTileParallax(card) {
+      card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const rx = ((cy / rect.height) - 0.5) * -8;
+        const ry = ((cx / rect.width) - 0.5) * 8;
+        card.style.transform = `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(4px)`;
+        const gx = (cx / rect.width) * 100;
+        const gy = (cy / rect.height) * 100;
+        card.style.background = `radial-gradient(circle at ${gx}% ${gy}%, rgba(255,255,255,0.1) 0%, var(--glass-bg) 60%)`;
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = '';
+        card.style.background = '';
+      });
     }
 
+    // Button ripple
+    generateBtn.addEventListener('click', (e) => {
+      const rect = generateBtn.getBoundingClientRect();
+      const ripple = document.createElement('span');
+      ripple.className = 'btn-ripple';
+      const size = Math.max(rect.width, rect.height);
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+      generateBtn.appendChild(ripple);
+      ripple.addEventListener('animationend', () => ripple.remove());
+    });
+
+    function setStage(el, state) { el.className = `stage stage-${state}`; }
+
+    const stageLabels = {
+      generating_theme: 'Generating themes',
+      generating_images: 'Creating images',
+      qc_check: 'Running QC',
+    };
+
     function resetUI() {
+      cardCounter = 0;
       pipelineSection.classList.add('hidden');
+      pipelineSection.classList.remove('processing');
       approvedSection.classList.add('hidden');
       rejectedSection.classList.add('hidden');
       conceptsPreview.classList.add('hidden');
@@ -475,6 +780,7 @@
       errorDisplay.classList.add('hidden');
       approvedGrid.innerHTML = '';
       rejectedGrid.innerHTML = '';
+      processingOverlay.classList.add('hidden');
       setStage(stageTheme, 'pending');
       setStage(stageMj, 'pending');
       setStage(stageQc, 'pending');
@@ -482,50 +788,60 @@
 
     function updateStages(stage) {
       const map = {
-        queued:            ['pending', 'pending', 'pending'],
-        generating_theme:  ['active',  'pending', 'pending'],
-        generating_images: ['done',    'active',  'pending'],
-        qc_check:          ['done',    'done',    'active'],
-        complete:          ['done',    'done',    'done'],
-        error:             ['error',   'error',   'error'],
+        queued:            ['pending','pending','pending'],
+        generating_theme:  ['active','pending','pending'],
+        generating_images: ['done','active','pending'],
+        qc_check:          ['done','done','active'],
+        complete:          ['done','done','done'],
+        error:             ['error','error','error'],
       };
-      const [t, m, q] = map[stage] || ['pending', 'pending', 'pending'];
+      const [t,m,q] = map[stage] || ['pending','pending','pending'];
       setStage(stageTheme, t);
       setStage(stageMj, m);
       setStage(stageQc, q);
+
+      if (stageLabels[stage]) {
+        processingLabel.textContent = stageLabels[stage];
+        processingOverlay.classList.remove('hidden');
+        pipelineSection.classList.add('processing');
+      } else {
+        processingOverlay.classList.add('hidden');
+        pipelineSection.classList.remove('processing');
+      }
     }
 
-    function esc(str) {
-      const d = document.createElement('div');
-      d.textContent = str || '';
-      return d.innerHTML;
-    }
+    function esc(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
 
+    let cardCounter = 0;
     function renderImageCard(img) {
       const card = document.createElement('div');
-      card.className = 'image-card';
-
-      let verdictClass = 'verdict-skip';
-      if (img.verdict === 'PASS') verdictClass = 'verdict-pass';
-      else if (img.verdict === 'FAIL') verdictClass = 'verdict-fail';
-      else if (img.verdict === 'ERROR') verdictClass = 'verdict-error';
+      card.className = 'image-card glass glass-glow glass-tilt';
+      const delay = -(cardCounter++ * 1.3);
+      card.style.setProperty('--glow-delay', `${delay}s`);
+      let vc = 'verdict-skip';
+      if (img.verdict === 'PASS') vc = 'verdict-pass';
+      else if (img.verdict === 'FAIL') vc = 'verdict-fail';
+      else if (img.verdict === 'ERROR') vc = 'verdict-error';
 
       card.innerHTML = `
         <img src="${esc(img.url)}" alt="" loading="lazy" />
         <div class="image-card-info">
           ${img.concept ? `<div class="image-card-concept">${esc(img.concept)}</div>` : ''}
           ${img.prompt ? `<div class="image-card-prompt">${esc(img.prompt)}</div>` : ''}
-          <span class="verdict-tag ${verdictClass}">${esc(img.verdict)}</span>
+          <div class="image-card-actions">
+            <span class="verdict-tag ${vc}">${esc(img.verdict)}</span>
+          </div>
           ${img.reason ? `<div class="image-card-reason">${esc(img.reason)}</div>` : ''}
         </div>
       `;
+      initTileParallax(card);
       return card;
     }
 
     async function startGeneration() {
       const fundName = fundNameInput.value.trim();
+      const fundThesis = fundThesisInput.value.trim();
       if (!fundName) { fundNameInput.focus(); return; }
-
       let styleJson = null;
       const rawJson = styleJsonInput.value.trim();
       if (rawJson) {
@@ -537,12 +853,13 @@
       pipelineSection.classList.remove('hidden');
       generateBtn.disabled = true;
       generateBtn.textContent = 'Running...';
+      generateBtn.classList.add('running');
 
       try {
         const res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fundName, styleJson }),
+          body: JSON.stringify({ fundName, fundThesis, styleJson }),
         });
         const { jobId } = await res.json();
         await pollJob(jobId);
@@ -553,6 +870,7 @@
       } finally {
         generateBtn.disabled = false;
         generateBtn.textContent = 'Generate';
+        generateBtn.classList.remove('running');
       }
     }
 
@@ -567,7 +885,7 @@
           conceptsPreview.classList.remove('hidden');
           conceptsList.innerHTML = status.concepts.map((c, i) =>
             `<div class="concept-row">
-              <span class="concept-num">${String(i + 1).padStart(2, '0')}</span>
+              <span class="concept-num">${String(i+1).padStart(2,'0')}</span>
               <span class="concept-label">${esc(c.concept)}</span>
               <span class="concept-prompt">${esc(c.prompt)}</span>
             </div>`
@@ -583,12 +901,10 @@
         if (status.stage === 'complete') {
           const resultsRes = await fetch(`/api/results/${jobId}`);
           const results = await resultsRes.json();
-
           if (results.approvedImages.length > 0) {
             approvedSection.classList.remove('hidden');
             results.approvedImages.forEach((img) => approvedGrid.appendChild(renderImageCard(img)));
           }
-
           if (results.rejectedImages.length > 0) {
             rejectedSection.classList.remove('hidden');
             rejectedCount.textContent = `(${results.rejectedImages.length})`;
@@ -599,6 +915,36 @@
       }
     }
 
+    // History modal
+    async function openHistory() {
+      historyModal.classList.remove('hidden');
+      historyContent.innerHTML = '<div class="history-empty">Loading...</div>';
+      try {
+        const res = await fetch('/api/history');
+        const history = await res.json();
+        if (history.length === 0) {
+          historyContent.innerHTML = '<div class="history-empty">No images generated yet.</div>';
+          return;
+        }
+        historyContent.innerHTML = `<div class="history-grid">${history.map((h) => `
+          <div class="history-card">
+            <img src="/api/archive/${esc(h.filename)}" alt="" loading="lazy" />
+            <div class="history-card-info">
+              <div class="history-card-fund">${esc(h.fundName)}</div>
+              ${h.concept ? `<div class="history-card-concept">${esc(h.concept)}</div>` : ''}
+              <div class="history-card-date">${new Date(h.archivedAt).toLocaleDateString()}</div>
+              <a class="download-btn" href="/api/archive/${esc(h.filename)}" download>&#8595; Download</a>
+            </div>
+          </div>
+        `).join('')}</div>`;
+      } catch {
+        historyContent.innerHTML = '<div class="history-empty">Failed to load history.</div>';
+      }
+    }
+
+    historyBtn.addEventListener('click', openHistory);
+    modalClose.addEventListener('click', () => historyModal.classList.add('hidden'));
+    historyModal.addEventListener('click', (e) => { if (e.target === historyModal) historyModal.classList.add('hidden'); });
     generateBtn.addEventListener('click', startGeneration);
     fundNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGeneration(); });
   </script>
