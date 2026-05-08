@@ -13,7 +13,7 @@ app.use(express.static(join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 const LEGNEXT_BASE = 'https://api.legnext.ai/api/v1';
-const MAX_IMAGES = 3;
+const NUM_CONCEPTS = 3;
 
 // ---------------------------------------------------------------------------
 // Prompts
@@ -26,7 +26,8 @@ const visualThesisPrompt = readFileSync(
 function loadClogPrompt() {
   try {
     const raw = readFileSync(join(__dirname, 'prompts', 'clog-qc.md'), 'utf-8');
-    if (raw.includes('PLACEHOLDER')) return null;
+    if (raw.startsWith('# PLACEHOLDER')) return null;
+    if (raw.trim().length < 100) return null;
     return raw;
   } catch {
     return null;
@@ -53,8 +54,8 @@ function createJob(fundName, styleJson) {
     fundName,
     styleJson,
     stage: 'queued',
-    themePrompt: null,
-    mjTaskId: null,
+    concepts: [],
+    mjTaskIds: [],
     rawImages: [],
     approvedImages: [],
     rejectedImages: [],
@@ -66,32 +67,65 @@ function createJob(fundName, styleJson) {
 }
 
 // ---------------------------------------------------------------------------
-// Stage 1 — Claude Sonnet: theme generation
+// Stage 1 — Claude Sonnet: generate 3 distinct 15-word image prompts
 // ---------------------------------------------------------------------------
-async function generateTheme(job) {
+async function generateThemes(job) {
   job.stage = 'generating_theme';
 
   const anthropic = new Anthropic();
 
-  const userMessage = job.styleJson
-    ? `**INPUT A — VISUAL STYLE JSON:**\n${JSON.stringify(job.styleJson, null, 2)}\n\n**INPUT B — FUND THESIS:**\n${job.fundName}\n\nGenerate the fused image-generation prompt now.`
-    : `**INPUT B — FUND THESIS:**\n${job.fundName}\n\nNo visual style JSON is provided. Use your best judgment for atmospheric tone. Generate the image-generation prompt now.`;
+  const styleContext = job.styleJson
+    ? `\n\nUse this visual style JSON for atmospheric tone only:\n${JSON.stringify(job.styleJson, null, 2)}`
+    : '';
 
   const resp = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 2048,
+    max_tokens: 1024,
     system: THEME_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMessage }],
+    messages: [
+      {
+        role: 'user',
+        content: `**FUND THESIS:** ${job.fundName}${styleContext}
+
+Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.
+
+CRITICAL CONSTRAINT: Each prompt must be 15 words or fewer. Write tight, vivid, cinematic descriptions. No filler words. Every word earns its place.
+
+Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
+- "concept": a 2-3 word label for the concept
+- "prompt": the image generation prompt (15 words max)
+
+Return ONLY the JSON array, no other text.`,
+      },
+    ],
   });
 
-  const promptText = resp.content
+  const raw = resp.content
     .filter((b) => b.type === 'text')
     .map((b) => b.text)
-    .join('\n')
-    .trim();
+    .join('');
 
-  job.themePrompt = promptText;
-  return promptText;
+  let concepts;
+  try {
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    concepts = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+  } catch {
+    throw new Error(`Failed to parse Claude response as JSON: ${raw.slice(0, 200)}`);
+  }
+
+  const valid = concepts
+    .filter((c) => c && typeof c.concept === 'string' && typeof c.prompt === 'string')
+    .slice(0, NUM_CONCEPTS);
+
+  if (valid.length === 0) {
+    throw new Error(`Claude returned no valid concepts. Raw: ${raw.slice(0, 300)}`);
+  }
+
+  job.concepts = valid;
+  console.log(`[job ${job.id}] Generated ${job.concepts.length} concepts:`);
+  job.concepts.forEach((c, i) => console.log(`  ${i + 1}. [${c.concept}] ${c.prompt}`));
+
+  return job.concepts;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,14 +156,13 @@ async function fetchMidjourneyResult(jobId) {
     method: 'GET',
     headers: { 'x-api-key': process.env.LEGNEXT_API_KEY },
   });
+  if (!res.ok) {
+    throw new Error(`LegNext job fetch returned ${res.status}`);
+  }
   return res.json();
 }
 
-async function pollMidjourney(job) {
-  job.stage = 'generating_images';
-  const jobId = await submitMidjourneyJob(job.themePrompt);
-  job.mjTaskId = jobId;
-
+async function pollSingleJob(jobId) {
   const MAX_ATTEMPTS = 60;
   const POLL_INTERVAL_MS = 5000;
 
@@ -140,13 +173,7 @@ async function pollMidjourney(job) {
     if (result.status === 'completed') {
       const allImages = result.output?.image_urls || [];
       const gridImage = result.output?.image_url;
-
-      // Prefer individual split images; fall back to grid
-      let images = allImages.length > 0 ? allImages : (gridImage ? [gridImage] : []);
-      images = images.slice(0, MAX_IMAGES);
-
-      job.rawImages = images;
-      return images;
+      return allImages.length > 0 ? allImages[0] : gridImage || null;
     }
 
     if (result.status === 'failed') {
@@ -157,18 +184,68 @@ async function pollMidjourney(job) {
   throw new Error('Midjourney task timed out after polling');
 }
 
+async function generateAllImages(job) {
+  job.stage = 'generating_images';
+
+  const submissionResults = await Promise.allSettled(
+    job.concepts.map((c) => submitMidjourneyJob(c.prompt))
+  );
+
+  const tasks = [];
+  for (let i = 0; i < submissionResults.length; i++) {
+    const result = submissionResults[i];
+    if (result.status === 'fulfilled') {
+      tasks.push({ taskId: result.value, concept: job.concepts[i] });
+    } else {
+      console.error(`[job ${job.id}] Failed to submit concept "${job.concepts[i].concept}":`, result.reason?.message);
+    }
+  }
+
+  job.mjTaskIds = tasks.map((t) => t.taskId);
+  console.log(`[job ${job.id}] Submitted ${tasks.length}/${job.concepts.length} MJ tasks`);
+
+  if (tasks.length === 0) {
+    throw new Error('All Midjourney submissions failed');
+  }
+
+  const pollResults = await Promise.allSettled(
+    tasks.map((t) =>
+      pollSingleJob(t.taskId).then((url) => ({
+        url,
+        concept: t.concept.concept,
+        prompt: t.concept.prompt,
+      }))
+    )
+  );
+
+  job.rawImages = pollResults
+    .filter((r) => r.status === 'fulfilled' && r.value.url)
+    .map((r) => r.value);
+
+  pollResults
+    .filter((r) => r.status === 'rejected')
+    .forEach((r) => console.error(`[job ${job.id}] MJ poll failed:`, r.reason?.message));
+
+  if (job.rawImages.length === 0) {
+    throw new Error('All Midjourney image generations failed');
+  }
+
+  console.log(`[job ${job.id}] Got ${job.rawImages.length} images back`);
+  return job.rawImages;
+}
+
 // ---------------------------------------------------------------------------
-// Stage 3 — Clog QC check
+// Stage 3 — Clog QC check (binary PASS/FAIL gate)
 // ---------------------------------------------------------------------------
+const QC_MODEL = 'claude-sonnet-4-20250514';
+
 async function runClogCheck(job) {
   const clogPrompt = loadClogPrompt();
   if (!clogPrompt) {
     job.stage = 'complete';
-    job.approvedImages = job.rawImages.map((url) => ({
-      url,
-      score: null,
+    job.approvedImages = job.rawImages.map((img) => ({
+      ...img,
       verdict: 'skipped',
-      reason: 'QC prompt not configured',
     }));
     return;
   }
@@ -176,11 +253,11 @@ async function runClogCheck(job) {
   job.stage = 'qc_check';
   const anthropic = new Anthropic();
 
-  for (const imageUrl of job.rawImages) {
+  const checks = job.rawImages.map(async (img) => {
     try {
       const resp = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2048,
+        model: QC_MODEL,
+        max_tokens: 10,
         system: clogPrompt,
         messages: [
           {
@@ -188,11 +265,7 @@ async function runClogCheck(job) {
             content: [
               {
                 type: 'image',
-                source: { type: 'url', url: imageUrl },
-              },
-              {
-                type: 'text',
-                text: `Review this image for the fund "${job.fundName}". Return your assessment as JSON with fields: score (number 0-10), verdict ("approved" | "rejected" | "manual_review"), reason (string).`,
+                source: { type: 'url', url: img.url },
               },
             ],
           },
@@ -202,33 +275,29 @@ async function runClogCheck(job) {
       const raw = resp.content
         .filter((b) => b.type === 'text')
         .map((b) => b.text)
-        .join('');
+        .join('')
+        .trim();
 
-      let assessment;
-      try {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        assessment = jsonMatch ? JSON.parse(jsonMatch[0]) : { score: null, verdict: 'manual_review', reason: raw };
-      } catch {
-        assessment = { score: null, verdict: 'manual_review', reason: raw };
-      }
+      const verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
 
-      const entry = { url: imageUrl, ...assessment };
+      const entry = { ...img, verdict };
 
-      if (assessment.verdict === 'approved') {
+      if (verdict === 'PASS') {
         job.approvedImages.push(entry);
       } else {
         job.rejectedImages.push(entry);
       }
     } catch (err) {
+      console.error(`[job ${job.id}] QC error for ${img.concept}:`, err.message);
       job.rejectedImages.push({
-        url: imageUrl,
-        score: null,
-        verdict: 'error',
-        reason: `QC check failed: ${err.message}`,
+        ...img,
+        verdict: 'ERROR',
+        reason: err.message,
       });
     }
-  }
+  });
 
+  await Promise.all(checks);
   job.stage = 'complete';
 }
 
@@ -237,8 +306,8 @@ async function runClogCheck(job) {
 // ---------------------------------------------------------------------------
 async function runPipeline(job) {
   try {
-    await generateTheme(job);
-    await pollMidjourney(job);
+    await generateThemes(job);
+    await generateAllImages(job);
     await runClogCheck(job);
   } catch (err) {
     job.stage = 'error';
@@ -267,8 +336,8 @@ app.get('/api/status/:jobId', (req, res) => {
   res.json({
     jobId: job.id,
     stage: job.stage,
-    themePrompt: job.themePrompt,
-    mjTaskId: job.mjTaskId,
+    concepts: job.concepts,
+    mjTaskIds: job.mjTaskIds,
     rawImageCount: job.rawImages.length,
     approvedCount: job.approvedImages.length,
     rejectedCount: job.rejectedImages.length,
@@ -284,7 +353,7 @@ app.get('/api/results/:jobId', (req, res) => {
     jobId: job.id,
     stage: job.stage,
     fundName: job.fundName,
-    themePrompt: job.themePrompt,
+    concepts: job.concepts,
     approvedImages: job.approvedImages,
     rejectedImages: job.rejectedImages,
     rawImages: job.rawImages,

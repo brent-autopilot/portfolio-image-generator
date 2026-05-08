@@ -1,145 +1,446 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fund Image Generation Machine</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            surface: '#0a0a0f',
-            card: '#12121a',
-            border: '#1e1e2e',
-            accent: '#6366f1',
-            'accent-dim': '#4f46e5',
-          },
-          fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-        },
-      },
-    };
-  </script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='42' fill='%23e84225'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    body { background: #0a0a0f; }
-    .pulse-dot { animation: pulse-ring 1.5s ease-in-out infinite; }
-    @keyframes pulse-ring {
-      0% { opacity: 1; }
-      50% { opacity: 0.4; }
-      100% { opacity: 1; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #1a1a1a;
+      --surface: #242424;
+      --surface-light: #f0ece6;
+      --surface-warm: #e8e2d8;
+      --accent: #e84225;
+      --accent-hover: #d13a1f;
+      --text: #f5f5f0;
+      --text-dim: #8a8a80;
+      --text-dark: #1a1a1a;
+      --border: #333;
+      --pass: #2ecc71;
+      --fail: #e84225;
+      --font: 'Space Grotesk', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
     }
-    .stage-active { color: #6366f1; }
-    .stage-done { color: #22c55e; }
-    .stage-pending { color: #3f3f50; }
-    .stage-error { color: #ef4444; }
-    .fade-in { animation: fadeIn 0.4s ease-out; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+    /* Header */
+    .header {
+      padding: 40px 0 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+      margin-bottom: 32px;
+    }
+    .header h1 {
+      font-size: 48px;
+      font-weight: 700;
+      letter-spacing: -2px;
+      line-height: 1;
+    }
+    .header-sub {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+    }
+    .header-dot {
+      width: 12px;
+      height: 12px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    /* Input area */
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 0;
+      margin-bottom: 32px;
+    }
+    .input-main {
+      background: var(--surface-light);
+      color: var(--text-dark);
+      padding: 32px;
+    }
+    .input-side {
+      background: var(--surface);
+      padding: 32px;
+      border-left: 1px solid var(--border);
+    }
+    .input-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .input-label--light { color: #666; }
+    .input-label--dark { color: var(--text-dim); }
+    .fund-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid #ccc;
+      font-family: var(--font);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      color: var(--text-dark);
+      padding: 12px 0;
+      transition: border-color 0.2s;
+    }
+    .fund-input::placeholder { color: #bbb; }
+    .fund-input:focus { outline: none; border-color: var(--accent); }
+    .style-textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.6;
+      padding: 12px;
+      resize: vertical;
+      min-height: 120px;
+      transition: border-color 0.2s;
+    }
+    .style-textarea::placeholder { color: #555; }
+    .style-textarea:focus { outline: none; border-color: var(--accent); }
+    .generate-btn {
+      margin-top: 20px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 14px 32px;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+      width: 100%;
+    }
+    .generate-btn:hover { background: var(--accent-hover); }
+    .generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Pipeline */
+    .pipeline {
+      background: var(--surface);
+      padding: 24px 32px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .pipeline.hidden { display: none; }
+    .stage {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-weight: 500;
+    }
+    .stage-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+    .stage-arrow {
+      margin: 0 20px;
+      color: #444;
+      font-size: 14px;
+    }
+    .stage-pending { color: #444; }
+    .stage-active { color: var(--accent); }
+    .stage-active .stage-dot { animation: pulse 1.4s ease-in-out infinite; }
+    .stage-done { color: var(--pass); }
+    .stage-error { color: var(--fail); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Concepts */
+    .concepts {
+      background: var(--surface);
+      padding: 24px 32px;
+      margin-bottom: 32px;
+      border-left: 3px solid var(--accent);
+    }
+    .concepts.hidden { display: none; }
+    .concepts-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+    .concept-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 6px 0;
+    }
+    .concept-num {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+      flex-shrink: 0;
+      width: 16px;
+    }
+    .concept-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .concept-prompt {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-left: 8px;
+    }
+
+    /* Error */
+    .error-bar {
+      background: rgba(232, 66, 37, 0.1);
+      border-left: 3px solid var(--fail);
+      padding: 16px 24px;
+      margin-bottom: 32px;
+      font-size: 13px;
+      color: var(--fail);
+    }
+    .error-bar.hidden { display: none; }
+
+    /* Image grid */
+    .results-section.hidden { display: none; }
+    .results-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .results-header h2 {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      font-weight: 600;
+    }
+    .results-header--pass h2 { color: var(--pass); }
+    .results-header--fail h2 { color: var(--text-dim); }
+    .results-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      margin-bottom: 40px;
+    }
+    .image-card {
+      background: var(--surface);
+      overflow: hidden;
+      position: relative;
+    }
+    .image-card img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+    }
+    .image-card-info {
+      padding: 16px 20px;
+    }
+    .image-card-concept {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .image-card-prompt {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    .verdict-tag {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding: 4px 10px;
+    }
+    .verdict-pass { background: var(--pass); color: #fff; }
+    .verdict-fail { background: var(--fail); color: #fff; }
+    .verdict-skip { background: #444; color: var(--text-dim); }
+    .verdict-error { background: #444; color: var(--fail); }
+    .image-card-reason {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+
+    /* Rejected toggle */
+    .rejected-toggle {
+      margin-bottom: 40px;
+    }
+    .rejected-toggle.hidden { display: none; }
+    .rejected-summary {
+      cursor: pointer;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      color: var(--text-dim);
+      font-weight: 600;
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .rejected-summary::-webkit-details-marker { display: none; }
+    .rejected-summary::before {
+      content: '+';
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--text-dim);
+      transition: transform 0.2s;
+    }
+    details[open] .rejected-summary::before {
+      content: '−';
+    }
+    .rejected-count {
+      color: #555;
+      font-weight: 400;
+    }
+
+    /* Fade */
+    .fade-in { animation: fadeIn 0.5s ease-out; }
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
+      from { opacity: 0; transform: translateY(12px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    textarea:focus, input:focus { outline: none; box-shadow: 0 0 0 2px #6366f1; }
+
+    @media (max-width: 768px) {
+      .input-grid { grid-template-columns: 1fr; }
+      .input-side { border-left: none; border-top: 1px solid var(--border); }
+      .image-grid { grid-template-columns: 1fr; }
+      .header h1 { font-size: 32px; }
+      .fund-input { font-size: 20px; }
+    }
   </style>
 </head>
-<body class="min-h-screen text-gray-200 font-sans">
-  <div class="max-w-5xl mx-auto px-6 py-12">
+<body>
+  <div class="container">
 
     <!-- Header -->
-    <header class="mb-12">
-      <h1 class="text-3xl font-bold tracking-tight text-white">Fund Image Generation Machine</h1>
-      <p class="mt-2 text-gray-500 text-sm">Claude Sonnet &rarr; Midjourney &rarr; Clog QC</p>
-    </header>
+    <div class="header">
+      <div>
+        <h1><span class="header-dot"></span>Machine</h1>
+      </div>
+      <span class="header-sub">Fund Image Generation</span>
+    </div>
 
-    <!-- Input Form -->
-    <section id="form-section" class="bg-card border border-border rounded-xl p-6 mb-8">
-      <div class="mb-5">
-        <label for="fund-name" class="block text-sm font-medium text-gray-400 mb-2">Fund Name / Thesis</label>
+    <!-- Input -->
+    <div class="input-grid">
+      <div class="input-main">
+        <label for="fund-name" class="input-label input-label--light">Fund Thesis</label>
         <input
           id="fund-name"
           type="text"
-          placeholder='e.g. "Hedge the AI Bubble" or "Voyage Fund — long-only deep-sea mining equities"'
-          class="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white placeholder-gray-600 text-sm"
+          class="fund-input"
+          placeholder="Hedge the AI Bubble"
+          autocomplete="off"
         />
       </div>
-
-      <div class="mb-5">
-        <label for="style-json" class="block text-sm font-medium text-gray-400 mb-2">
-          Visual Style JSON <span class="text-gray-600">(optional)</span>
-        </label>
+      <div class="input-side">
+        <label for="style-json" class="input-label input-label--dark">Style JSON</label>
         <textarea
           id="style-json"
-          rows="6"
-          placeholder="Paste an art direction JSON object here, or leave blank for Claude to choose the atmosphere."
-          class="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white placeholder-gray-600 text-sm font-mono"
+          class="style-textarea"
+          placeholder='{ "visual_style": { ... } }'
         ></textarea>
+        <button id="generate-btn" class="generate-btn">Generate</button>
       </div>
+    </div>
 
-      <button
-        id="generate-btn"
-        class="bg-accent hover:bg-accent-dim text-white font-semibold px-6 py-3 rounded-lg transition-colors text-sm"
-      >
-        Generate Images
-      </button>
+    <!-- Pipeline -->
+    <div id="pipeline-section" class="pipeline hidden">
+      <div id="stage-theme" class="stage stage-pending">
+        <span class="stage-dot"></span>
+        <span>Theme</span>
+      </div>
+      <span class="stage-arrow">&rarr;</span>
+      <div id="stage-mj" class="stage stage-pending">
+        <span class="stage-dot"></span>
+        <span>Midjourney</span>
+      </div>
+      <span class="stage-arrow">&rarr;</span>
+      <div id="stage-qc" class="stage stage-pending">
+        <span class="stage-dot"></span>
+        <span>QC Gate</span>
+      </div>
+    </div>
+
+    <!-- Concepts -->
+    <div id="concepts-preview" class="concepts hidden fade-in">
+      <div class="concepts-title">Concepts</div>
+      <div id="concepts-list"></div>
+    </div>
+
+    <!-- Error -->
+    <div id="error-display" class="error-bar hidden">
+      <span id="error-text"></span>
+    </div>
+
+    <!-- Approved -->
+    <section id="approved-section" class="results-section hidden fade-in">
+      <div class="results-header results-header--pass">
+        <h2>Passed</h2>
+        <div class="results-line"></div>
+      </div>
+      <div id="approved-grid" class="image-grid"></div>
     </section>
 
-    <!-- Pipeline Status -->
-    <section id="pipeline-section" class="hidden mb-8 fade-in">
-      <div class="bg-card border border-border rounded-xl p-6">
-        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Pipeline Status</h2>
-        <div class="flex items-center gap-6 text-sm">
-          <div id="stage-theme" class="flex items-center gap-2 stage-pending">
-            <span class="w-2 h-2 rounded-full bg-current"></span>
-            <span>Theme Generation</span>
-          </div>
-          <span class="text-gray-700">&rarr;</span>
-          <div id="stage-mj" class="flex items-center gap-2 stage-pending">
-            <span class="w-2 h-2 rounded-full bg-current"></span>
-            <span>Midjourney</span>
-          </div>
-          <span class="text-gray-700">&rarr;</span>
-          <div id="stage-qc" class="flex items-center gap-2 stage-pending">
-            <span class="w-2 h-2 rounded-full bg-current"></span>
-            <span>Clog QC</span>
-          </div>
-        </div>
-
-        <!-- Theme prompt preview -->
-        <div id="theme-preview" class="hidden mt-5 p-4 bg-surface rounded-lg border border-border">
-          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Generated Prompt</h3>
-          <p id="theme-text" class="text-sm text-gray-300 font-mono leading-relaxed whitespace-pre-wrap"></p>
-        </div>
-
-        <!-- Error display -->
-        <div id="error-display" class="hidden mt-5 p-4 bg-red-950/30 border border-red-900/50 rounded-lg">
-          <p id="error-text" class="text-sm text-red-400"></p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Approved Images -->
-    <section id="approved-section" class="hidden mb-8 fade-in">
-      <div class="bg-card border border-border rounded-xl p-6">
-        <h2 class="text-sm font-semibold text-green-400 uppercase tracking-wider mb-4">Approved Images</h2>
-        <div id="approved-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
-      </div>
-    </section>
-
-    <!-- Rejected Images -->
-    <section id="rejected-section" class="hidden mb-8 fade-in">
-      <details class="bg-card border border-border rounded-xl">
-        <summary class="p-6 cursor-pointer text-sm font-semibold text-red-400 uppercase tracking-wider">
-          Rejected Images <span id="rejected-count" class="text-gray-600 normal-case font-normal"></span>
+    <!-- Rejected -->
+    <div id="rejected-section" class="rejected-toggle hidden fade-in">
+      <details>
+        <summary class="rejected-summary">
+          Rejected <span id="rejected-count" class="rejected-count"></span>
         </summary>
-        <div id="rejected-grid" class="p-6 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        <div id="rejected-grid" class="image-grid" style="margin-top: 16px;"></div>
       </details>
-    </section>
+    </div>
 
   </div>
 
@@ -151,8 +452,8 @@
     const stageTheme = document.getElementById('stage-theme');
     const stageMj = document.getElementById('stage-mj');
     const stageQc = document.getElementById('stage-qc');
-    const themePreview = document.getElementById('theme-preview');
-    const themeText = document.getElementById('theme-text');
+    const conceptsPreview = document.getElementById('concepts-preview');
+    const conceptsList = document.getElementById('concepts-list');
     const errorDisplay = document.getElementById('error-display');
     const errorText = document.getElementById('error-text');
     const approvedSection = document.getElementById('approved-section');
@@ -162,17 +463,15 @@
     const rejectedCount = document.getElementById('rejected-count');
 
     function setStage(el, state) {
-      el.className = el.className.replace(/stage-\w+/, `stage-${state}`);
-      const dot = el.querySelector('span');
-      if (state === 'active') dot.classList.add('pulse-dot');
-      else dot.classList.remove('pulse-dot');
+      el.className = `stage stage-${state}`;
     }
 
     function resetUI() {
       pipelineSection.classList.add('hidden');
       approvedSection.classList.add('hidden');
       rejectedSection.classList.add('hidden');
-      themePreview.classList.add('hidden');
+      conceptsPreview.classList.add('hidden');
+      conceptsList.innerHTML = '';
       errorDisplay.classList.add('hidden');
       approvedGrid.innerHTML = '';
       rejectedGrid.innerHTML = '';
@@ -183,12 +482,12 @@
 
     function updateStages(stage) {
       const map = {
-        queued: ['pending', 'pending', 'pending'],
-        generating_theme: ['active', 'pending', 'pending'],
-        generating_images: ['done', 'active', 'pending'],
-        qc_check: ['done', 'done', 'active'],
-        complete: ['done', 'done', 'done'],
-        error: ['error', 'error', 'error'],
+        queued:            ['pending', 'pending', 'pending'],
+        generating_theme:  ['active',  'pending', 'pending'],
+        generating_images: ['done',    'active',  'pending'],
+        qc_check:          ['done',    'done',    'active'],
+        complete:          ['done',    'done',    'done'],
+        error:             ['error',   'error',   'error'],
       };
       const [t, m, q] = map[stage] || ['pending', 'pending', 'pending'];
       setStage(stageTheme, t);
@@ -196,15 +495,28 @@
       setStage(stageQc, q);
     }
 
-    function renderImageCard(img, isApproved) {
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    }
+
+    function renderImageCard(img) {
       const card = document.createElement('div');
-      card.className = 'rounded-lg overflow-hidden border border-border bg-surface';
+      card.className = 'image-card';
+
+      let verdictClass = 'verdict-skip';
+      if (img.verdict === 'PASS') verdictClass = 'verdict-pass';
+      else if (img.verdict === 'FAIL') verdictClass = 'verdict-fail';
+      else if (img.verdict === 'ERROR') verdictClass = 'verdict-error';
+
       card.innerHTML = `
-        <img src="${img.url}" alt="Generated image" class="w-full aspect-square object-cover" loading="lazy" />
-        <div class="p-3">
-          ${img.score != null ? `<span class="text-xs font-mono ${isApproved ? 'text-green-400' : 'text-red-400'}">${img.score}/10</span>` : ''}
-          <span class="text-xs font-mono text-gray-500 ml-2">${img.verdict}</span>
-          ${img.reason ? `<p class="text-xs text-gray-500 mt-1 line-clamp-3">${img.reason}</p>` : ''}
+        <img src="${esc(img.url)}" alt="" loading="lazy" />
+        <div class="image-card-info">
+          ${img.concept ? `<div class="image-card-concept">${esc(img.concept)}</div>` : ''}
+          ${img.prompt ? `<div class="image-card-prompt">${esc(img.prompt)}</div>` : ''}
+          <span class="verdict-tag ${verdictClass}">${esc(img.verdict)}</span>
+          ${img.reason ? `<div class="image-card-reason">${esc(img.reason)}</div>` : ''}
         </div>
       `;
       return card;
@@ -212,27 +524,19 @@
 
     async function startGeneration() {
       const fundName = fundNameInput.value.trim();
-      if (!fundName) {
-        fundNameInput.focus();
-        return;
-      }
+      if (!fundName) { fundNameInput.focus(); return; }
 
       let styleJson = null;
       const rawJson = styleJsonInput.value.trim();
       if (rawJson) {
-        try {
-          styleJson = JSON.parse(rawJson);
-        } catch {
-          alert('Invalid JSON in the style field. Fix it or leave it blank.');
-          return;
-        }
+        try { styleJson = JSON.parse(rawJson); }
+        catch { alert('Invalid JSON in the style field.'); return; }
       }
 
       resetUI();
       pipelineSection.classList.remove('hidden');
       generateBtn.disabled = true;
       generateBtn.textContent = 'Running...';
-      generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
 
       try {
         const res = await fetch('/api/generate', {
@@ -241,7 +545,6 @@
           body: JSON.stringify({ fundName, styleJson }),
         });
         const { jobId } = await res.json();
-
         await pollJob(jobId);
       } catch (err) {
         errorDisplay.classList.remove('hidden');
@@ -249,25 +552,26 @@
         updateStages('error');
       } finally {
         generateBtn.disabled = false;
-        generateBtn.textContent = 'Generate Images';
-        generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        generateBtn.textContent = 'Generate';
       }
     }
 
     async function pollJob(jobId) {
-      const POLL_MS = 2000;
-
       while (true) {
-        await new Promise((r) => setTimeout(r, POLL_MS));
-
+        await new Promise((r) => setTimeout(r, 2000));
         const statusRes = await fetch(`/api/status/${jobId}`);
         const status = await statusRes.json();
-
         updateStages(status.stage);
 
-        if (status.themePrompt && themePreview.classList.contains('hidden')) {
-          themePreview.classList.remove('hidden');
-          themeText.textContent = status.themePrompt;
+        if (status.concepts?.length > 0 && conceptsPreview.classList.contains('hidden')) {
+          conceptsPreview.classList.remove('hidden');
+          conceptsList.innerHTML = status.concepts.map((c, i) =>
+            `<div class="concept-row">
+              <span class="concept-num">${String(i + 1).padStart(2, '0')}</span>
+              <span class="concept-label">${esc(c.concept)}</span>
+              <span class="concept-prompt">${esc(c.prompt)}</span>
+            </div>`
+          ).join('');
         }
 
         if (status.stage === 'error') {
@@ -282,29 +586,21 @@
 
           if (results.approvedImages.length > 0) {
             approvedSection.classList.remove('hidden');
-            results.approvedImages.forEach((img) => {
-              approvedGrid.appendChild(renderImageCard(img, true));
-            });
+            results.approvedImages.forEach((img) => approvedGrid.appendChild(renderImageCard(img)));
           }
 
           if (results.rejectedImages.length > 0) {
             rejectedSection.classList.remove('hidden');
             rejectedCount.textContent = `(${results.rejectedImages.length})`;
-            results.rejectedImages.forEach((img) => {
-              rejectedGrid.appendChild(renderImageCard(img, false));
-            });
+            results.rejectedImages.forEach((img) => rejectedGrid.appendChild(renderImageCard(img)));
           }
-
           return;
         }
       }
     }
 
     generateBtn.addEventListener('click', startGeneration);
-
-    fundNameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') startGeneration();
-    });
+    fundNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGeneration(); });
   </script>
 </body>
 </html>
