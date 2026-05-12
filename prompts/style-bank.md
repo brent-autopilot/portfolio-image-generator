@@ -204,3 +204,28 @@ wet-on-wet watercolor bloom, pigment feathering outward in unpredictable organic
 Mark Rothko color field, two hovering rectangular masses with soft vibrating edges
 Takashi Murakami superflat, smiling flower motifs with lurid candy color and flat depth
 Giorgio de Chirico metaphysical piazza, elongated shadows and empty arcades at dusk
+3D chrome monogram on matte black, beveled metallic letterform with environment reflection
+geometric shield emblem, brushed titanium with chamfered edges and subtle gradient shadow
+abstract bull icon, angular low-poly 3D form in polished gunmetal on dark field
+interlocking rings mark, three precision-milled platinum bands floating on black velvet
+faceted gemstone logomark, octagonal cut with internal caustics on deep navy ground
+architectural column capital, 3D Ionic scroll rendered in brushed gold on obsidian
+rising arrow prism, triangular glass form refracting light spectrum on black background
+double helix symbol, intertwined chrome strands with depth-of-field blur on dark matte
+nested hexagon grid, layered translucent panels with edge-lit frost on black substrate
+orbital ring system, concentric chrome arcs in motion around a glowing core sphere
+abstract falcon silhouette, swept-wing form in polished rhodium with dramatic rim light
+stacked chevron mark, overlapping metallic V-shapes with parallax depth and grain
+compass rose emblem, precise eight-point star in engraved steel with patina detail
+Möbius strip logomark, infinite chrome loop with reflective surface on charcoal backdrop
+wave interference pattern, two overlapping sine forms in silver leaf on matte black
+keystone arch symbol, 3D limestone block with gold inlay veining on dark ground
+phi spiral mark, golden ratio curve in brushed bronze with mathematical grid overlay
+crystal lattice structure, molecular geometry in frosted glass with internal refraction
+crown reduction mark, minimalist five-point crown in matte platinum on black leather
+delta formation icon, three ascending planes in polished nickel with cast shadow
+atlas sphere, wireframe globe held by abstract chrome shoulders on void background
+infinity loop knot, seamless brushed palladium form with soft ambient occlusion
+obelisk monolith, tapered black granite pillar with a single gold edge catch
+tessellated diamond grid, repeating faceted surface in black chrome with specular points
+anchor and compass fusion, nautical mark in aged brass with verdigris detail on slate
