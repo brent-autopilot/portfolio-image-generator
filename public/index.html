@@ -606,7 +606,7 @@
     .gallery-scatter {
       position: relative;
       width: 100%;
-      height: 720px;
+      height: 1100px;
       overflow: hidden;
       border-radius: 20px;
       margin-bottom: 40px;
@@ -614,15 +614,15 @@
     .gallery-card {
       position: absolute;
       will-change: transform;
-      transition: box-shadow 0.4s, filter 0.4s, opacity 0.4s, transform 0.3s ease-out;
+      transition: box-shadow 0.4s, filter 0.4s, opacity 0.4s, transform 0.12s ease-out;
       cursor: pointer;
     }
     .gallery-card:hover {
       z-index: 10;
       box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,255,255,0.06);
     }
-    .gallery-card--pass { width: 280px; }
-    .gallery-card--fail { width: 168px; }
+    .gallery-card--pass { width: 220px; }
+    .gallery-card--fail { width: 140px; }
     .gallery-card-img {
       width: 100%;
       aspect-ratio: 1;
@@ -1299,12 +1299,18 @@
     }
 
     const GALLERY_SLOTS = [
-      { x: 3,  y: 2,  depth: 0.3 },
-      { x: 35, y: 5,  depth: 1.0 },
-      { x: 68, y: 3,  depth: 0.6 },
-      { x: 6,  y: 46, depth: 0.9 },
-      { x: 40, y: 44, depth: 0.4 },
-      { x: 66, y: 48, depth: 0.75 },
+      { x: 1,  y: 1,  depth: 0.15 },
+      { x: 24, y: 3,  depth: 0.8 },
+      { x: 48, y: 1,  depth: 0.45 },
+      { x: 72, y: 4,  depth: 1.0 },
+      { x: 4,  y: 28, depth: 0.65 },
+      { x: 28, y: 30, depth: 0.3 },
+      { x: 52, y: 27, depth: 0.9 },
+      { x: 74, y: 31, depth: 0.2 },
+      { x: 2,  y: 55, depth: 0.85 },
+      { x: 26, y: 57, depth: 0.5 },
+      { x: 50, y: 54, depth: 0.35 },
+      { x: 73, y: 58, depth: 0.75 },
     ];
 
     function renderGalleryCard(img, index) {
@@ -1344,26 +1350,24 @@
       return card;
     }
 
+    let _galleryContainer = null;
     function initGalleryParallax(container) {
-      container.addEventListener('mousemove', (e) => {
-        const rect = container.getBoundingClientRect();
-        const mx = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
-        const my = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
-        for (const card of container.children) {
-          const depth = parseFloat(card.dataset.depth) || 0.5;
-          const baseRot = parseFloat(card.dataset.baseRotation) || 0;
-          const tx = mx * depth * 30;
-          const ty = my * depth * 22;
-          card.style.transform = `translate(${tx}px, ${ty}px) rotate(${baseRot}deg)`;
-        }
-      });
-      container.addEventListener('mouseleave', () => {
-        for (const card of container.children) {
-          const baseRot = parseFloat(card.dataset.baseRotation) || 0;
-          card.style.transform = `rotate(${baseRot}deg)`;
-        }
-      });
+      _galleryContainer = container;
     }
+    document.addEventListener('mousemove', (e) => {
+      if (!_galleryContainer || !_galleryContainer.children.length) return;
+      if (gallerySection.classList.contains('hidden')) return;
+      const mx = (e.clientX / window.innerWidth - 0.5) * 2;
+      const my = (e.clientY / window.innerHeight - 0.5) * 2;
+      for (const card of _galleryContainer.children) {
+        const depth = parseFloat(card.dataset.depth) || 0.5;
+        const baseRot = parseFloat(card.dataset.baseRotation) || 0;
+        const tx = mx * depth * 80;
+        const ty = my * depth * 55;
+        const sc = 1 + depth * 0.04 * (1 - Math.abs(mx));
+        card.style.transform = `translate(${tx}px, ${ty}px) rotate(${baseRot}deg) scale(${sc.toFixed(3)})`;
+      }
+    });
 
     const lightbox = document.getElementById('lightbox');
     const lightboxImg = document.getElementById('lightbox-img');

@@ -339,15 +339,38 @@ async function fetchMidjourneyResult(jobId) {
   return res.json();
 }
 
-async function pollSingleJob(jobId) {
+async function submitUpscale(jobId, imageNo = 0) {
+  const apiKey = process.env.LEGNEXT_API_KEY;
+  const res = await fetch(`${LEGNEXT_BASE}/upscale`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+    },
+    body: JSON.stringify({ jobId, imageNo, type: 0 }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let msg = `LegNext upscale returned HTTP ${res.status}`;
+    try { const j = JSON.parse(text); msg = j.error?.message || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  if (data.error && data.error.code !== 0) {
+    throw new Error(data.error?.message || 'Upscale request failed');
+  }
+  return data.job_id;
+}
+
+async function pollGridJob(jobId) {
   for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     const result = await fetchMidjourneyResult(jobId);
 
     if (result.status === 'completed') {
-      const allImages = result.output?.image_urls || [];
-      const gridImage = result.output?.image_url;
-      return allImages.length > 0 ? allImages[0] : gridImage || null;
+      return jobId;
     }
 
     if (result.status === 'failed') {
@@ -356,6 +379,44 @@ async function pollSingleJob(jobId) {
   }
 
   throw new Error('Midjourney task timed out after polling');
+}
+
+async function pollUpscaleJob(jobId) {
+  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    const result = await fetchMidjourneyResult(jobId);
+
+    if (result.status === 'completed') {
+      const url = result.output?.image_url || (result.output?.image_urls?.[0]) || null;
+      if (!url) throw new Error('Upscale completed but no image URL returned');
+      return url;
+    }
+
+    if (result.status === 'failed') {
+      throw new Error(result.error?.message || 'Upscale task failed');
+    }
+  }
+
+  throw new Error('Upscale task timed out after polling');
+}
+
+async function upscaleAllFour(gridJobId) {
+  const upscaleResults = await Promise.allSettled(
+    [0, 1, 2, 3].map(async (imageNo) => {
+      const upscaleJobId = await submitUpscale(gridJobId, imageNo);
+      return pollUpscaleJob(upscaleJobId);
+    })
+  );
+
+  const urls = [];
+  for (let i = 0; i < upscaleResults.length; i++) {
+    if (upscaleResults[i].status === 'fulfilled') {
+      urls.push(upscaleResults[i].value);
+    } else {
+      console.error(`[upscale ${gridJobId}] Image ${i} failed:`, upscaleResults[i].reason?.message);
+    }
+  }
+  return urls;
 }
 
 async function generateAllImages(job) {
@@ -382,31 +443,48 @@ async function generateAllImages(job) {
     throw new Error('All Midjourney submissions failed');
   }
 
-  const pollResults = await Promise.allSettled(
-    tasks.map((t) =>
-      pollSingleJob(t.taskId).then((url) => ({
-        url,
-        concept: t.concept.concept,
-        prompt: t.concept.prompt,
-        style: t.concept.style || null,
-        interpretation: t.concept.interpretation || null,
-      }))
-    )
+  const gridResults = await Promise.allSettled(
+    tasks.map((t) => pollGridJob(t.taskId))
   );
 
-  job.rawImages = pollResults
-    .filter((r) => r.status === 'fulfilled' && r.value.url)
-    .map((r) => r.value);
+  console.log(`[job ${job.id}] Grids complete, upscaling all quadrants...`);
 
-  pollResults
-    .filter((r) => r.status === 'rejected')
-    .forEach((r) => console.error(`[job ${job.id}] MJ poll failed:`, r.reason?.message));
+  const allImages = [];
+  const upscalePromises = [];
+
+  for (let i = 0; i < gridResults.length; i++) {
+    if (gridResults[i].status === 'rejected') {
+      console.error(`[job ${job.id}] Grid poll failed for "${tasks[i].concept.concept}":`, gridResults[i].reason?.message);
+      continue;
+    }
+
+    const gridJobId = gridResults[i].value;
+    const concept = tasks[i].concept;
+
+    upscalePromises.push(
+      upscaleAllFour(gridJobId).then((urls) => {
+        for (const url of urls) {
+          allImages.push({
+            url,
+            concept: concept.concept,
+            prompt: concept.prompt,
+            style: concept.style || null,
+            interpretation: concept.interpretation || null,
+          });
+        }
+      })
+    );
+  }
+
+  await Promise.allSettled(upscalePromises);
+
+  job.rawImages = allImages.filter((img) => img.url);
 
   if (job.rawImages.length === 0) {
     throw new Error('All Midjourney image generations failed');
   }
 
-  console.log(`[job ${job.id}] Got ${job.rawImages.length} images back`);
+  console.log(`[job ${job.id}] Got ${job.rawImages.length} upscaled images back`);
   return job.rawImages;
 }
 
