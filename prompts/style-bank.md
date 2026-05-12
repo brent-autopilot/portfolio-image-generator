@@ -104,3 +104,53 @@ cinematic one-point perspective, Kubrick-style symmetrical corridor
 amber preservation, object suspended in translucent golden resin
 Hubble space telescope palette, vivid nebula gas clouds in deep black
 noir graphic novel panel, heavy ink shadows with minimal color accent
+large format Polaroid transfer, soft bleeding edges with muted tonality
+flash photography at night, harsh on-camera flash with deep black falloff
+Wes Anderson symmetry, pastel palette with obsessive centered framing
+terracotta and earth tones, warm clay surfaces with Mediterranean light
+solvent transfer print, ghostly reversed text and image degradation
+laser-cut acrylic layers, translucent colored sheets with edge-lit glow
+oxidized steel wall, Corten rust patina with industrial weathering
+high-key beauty photography, blown-out whites with luminous skin
+diptych comparison, two contrasting images side by side with clean divide
+embossed blind deboss on heavy stock, texture visible only through shadow
+satellite night imagery, city lights as golden webs on black earth
+medical imaging aesthetic, MRI or CT scan cross-section with false color
+candlelit chiaroscuro, single flame illuminating a subject in darkness
+vitrine museum display, object on pedestal behind anti-reflective glass
+foil stamp on matte black, metallic gold or silver catching directional light
+deep depth of field landscape, everything tack-sharp from foreground to infinity
+monumental bronze casting, verdigris patina with dramatic museum lighting
+ferrofluid macro, magnetic liquid spikes responding to invisible forces
+Technicolor three-strip film, hyper-saturated vintage Hollywood color
+negative space typography, letters formed by the absence of the subject
+carbon fiber weave, tight repeating pattern with specular highlights
+sun-bleached roadside Americana, faded paint and desert heat haze
+crumpled metallic foil, reflections fractured across a thousand surfaces
+lensball refraction, inverted landscape captured in a glass sphere
+dense fog with silhouette, figure barely visible through atmospheric white
+precision Swiss watchmaking, extreme macro of movement and escapement
+black glass reflection, subject doubled on a polished obsidian surface
+expired Polaroid film, heavy magenta shift with chemical bloom
+sand dune aerial, wind-carved ridgelines creating abstract wave patterns
+concrete pour texture, fresh wet surface with aggregate just visible
+cathedral light shaft, single beam cutting through dusty interior darkness
+phosphorescent glow, objects emitting soft green-blue light in darkness
+palladium over platinum print, split-toned with extreme shadow detail
+Japanese zen garden rake lines, concentric sand patterns around stone
+copper electroforming, organic objects preserved in metallic shell
+diagrammatic patent illustration, precise linework with numbered callouts
+stadium floodlight drama, subject isolated in a cone of harsh white light
+stage fog and backlight, performer silhouetted in volumetric haze
+Dutch angle cinematography, tilted frame creating tension and unease
+reflective infinity room, Kusama-style mirrored space with floating lights
+peeling billboard archaeology, layered decades of wheat-pasted advertisements
+fluorescent mineral photography, UV-reactive crystals glowing in darkness
+hand-tinted black and white, selective color painted onto monochrome print
+scorched earth texture, charred and cracked surface with ember glow
+aerospace engineering diagram, exploded view technical drawing
+silk screen on acetate, transparent layered color with registration marks
+arctic ice core cross-section, trapped air bubbles in ancient compressed ice
+brutalist monument at dusk, massive concrete form against gradient sky
+slow shutter panning shot, subject sharp against horizontally streaked background
+resin-encased specimen, biological form frozen in crystal-clear block

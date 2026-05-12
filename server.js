@@ -122,6 +122,26 @@ function pickRandomStyles(count) {
   return picks;
 }
 
+function loadInterpretationBank() {
+  const raw = readFileSync(join(__dirname, 'prompts', 'interpretation-bank.md'), 'utf-8');
+  return raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && /^[a-zA-Z]/.test(l));
+}
+
+const INTERPRETATION_BANK = loadInterpretationBank();
+
+function pickRandomInterpretations(count) {
+  const pool = [...INTERPRETATION_BANK];
+  const picks = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picks.push(pool.splice(idx, 1)[0]);
+  }
+  return picks;
+}
+
 function loadClogPrompt() {
   try {
     const raw = readFileSync(join(__dirname, 'prompts', 'clog-qc.md'), 'utf-8');
@@ -155,6 +175,7 @@ function createJob(fundName, fundThesis, styleJson, useStyleBank = true) {
     useStyleBank,
     stage: 'queued',
     assignedStyles: [],
+    assignedInterpretations: [],
     concepts: [],
     mjTaskIds: [],
     rawImages: [],
@@ -189,24 +210,36 @@ async function generateThemes(job) {
 
   const thesis = job.fundThesis || job.fundName;
 
-  let styleParagraph = '';
+  let directivesParagraph = '';
+  let extraReturnFields = '';
+
   if (job.useStyleBank) {
     const styles = pickRandomStyles(NUM_CONCEPTS);
+    const interpretations = pickRandomInterpretations(NUM_CONCEPTS);
     job.assignedStyles = styles;
+    job.assignedInterpretations = interpretations;
     console.log(`[job ${job.id}] Assigned styles:`, styles);
+    console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
 
-    const styleDirectives = styles
-      .map((s, i) => `  Concept ${i + 1} style: "${s}"`)
+    const directives = styles
+      .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} interpretation: "${interpretations[i]}"`)
       .join('\n');
 
-    styleParagraph = `\n\nEach concept has been assigned a mandatory visual style. You MUST incorporate the assigned style into the prompt for that concept — it defines the artistic treatment, medium, or technique for the image:\n\n${styleDirectives}\n\nThe style must be baked into the prompt itself, not appended as a tag.`;
+    directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style AND a mandatory interpretation angle.
+
+Style defines the artistic treatment — the medium, technique, or rendering approach for the image.
+Interpretation defines the conceptual approach — what to depict, what angle to take, how to think about the fund.
+
+You MUST use BOTH for each concept. The interpretation angle overrides your default instinct about what to depict — follow it even if it leads somewhere unexpected:
+
+${directives}
+
+The style must be baked into the prompt itself, not appended as a tag. The interpretation must shape WHAT you depict, not just how you describe it.`;
+
+    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
   } else {
     console.log(`[job ${job.id}] Style bank disabled`);
   }
-
-  const styleReturnField = job.useStyleBank
-    ? '\n- "style": the assigned style directive (echo it back exactly)'
-    : '';
 
   const resp = await getAnthropic().messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -217,13 +250,13 @@ async function generateThemes(job) {
         role: 'user',
         content: `**FUND NAME:** ${job.fundName}\n**FUND THESIS:** ${thesis}${styleContext}
 
-Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.${styleParagraph}
+Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.${directivesParagraph}
 
 CRITICAL CONSTRAINT: Each prompt must be 15 words or fewer. Write tight, vivid, cinematic descriptions. No filler words. Every word earns its place.
 
 Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
 - "concept": a 2-3 word label for the concept
-- "prompt": the image generation prompt (15 words max)${styleReturnField}
+- "prompt": the image generation prompt (15 words max)${extraReturnFields}
 
 Return ONLY the JSON array, no other text.`,
       },
@@ -356,6 +389,7 @@ async function generateAllImages(job) {
         concept: t.concept.concept,
         prompt: t.concept.prompt,
         style: t.concept.style || null,
+        interpretation: t.concept.interpretation || null,
       }))
     )
   );
@@ -508,6 +542,7 @@ app.get('/api/status/:jobId', (req, res) => {
     fundThesis: job.fundThesis,
     useStyleBank: job.useStyleBank,
     assignedStyles: job.assignedStyles,
+    assignedInterpretations: job.assignedInterpretations,
     concepts: job.concepts,
     mjTaskIds: job.mjTaskIds,
     rawImageCount: job.rawImages.length,
@@ -528,6 +563,7 @@ app.get('/api/results/:jobId', (req, res) => {
     fundThesis: job.fundThesis,
     useStyleBank: job.useStyleBank,
     assignedStyles: job.assignedStyles,
+    assignedInterpretations: job.assignedInterpretations,
     concepts: job.concepts,
     approvedImages: job.approvedImages,
     rejectedImages: job.rejectedImages,
@@ -600,6 +636,7 @@ async function archiveImage(img, fundName, jobId) {
     concept: img.concept || null,
     prompt: img.prompt || null,
     style: img.style || null,
+    interpretation: img.interpretation || null,
     verdict: img.verdict || null,
     originalUrl: img.url,
     filename,

@@ -502,6 +502,20 @@
       max-width: 200px;
       flex-shrink: 0;
     }
+    .concept-interp {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: rgba(167,139,250,0.9);
+      background: rgba(167,139,250,0.08);
+      border: 1px solid rgba(167,139,250,0.15);
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+      flex-shrink: 0;
+    }
     .concept-prompt { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-left: auto; max-width: 40%; text-align: right; flex-shrink: 0; }
 
     /* Error */
@@ -588,23 +602,111 @@
     .verdict-error { background: rgba(248,113,113,0.08); color: var(--fail); border: 1px solid rgba(248,113,113,0.15); }
     .image-card-reason { font-size: 10px; color: var(--text-dim); margin-top: 10px; line-height: 1.4; }
 
-    /* Rejected */
-    .rejected-toggle.hidden { display: none; }
-    .rejected-summary {
-      cursor: pointer;
-      font-size: 10px; text-transform: uppercase; letter-spacing: 3px;
-      color: var(--text-dim); font-weight: 600;
-      padding: 20px 0;
-      border-top: 1px solid rgba(255,255,255,0.06);
-      list-style: none;
-      display: flex; align-items: center; gap: 10px;
-      transition: color 0.2s;
+    /* Scattered gallery */
+    .gallery-scatter {
+      position: relative;
+      width: 100%;
+      height: 720px;
+      overflow: hidden;
+      border-radius: 20px;
+      margin-bottom: 40px;
     }
-    .rejected-summary:hover { color: var(--text-mid); }
-    .rejected-summary::-webkit-details-marker { display: none; }
-    .rejected-summary::before { content: '+'; font-size: 18px; font-weight: 400; color: var(--text-dim); width: 20px; text-align: center; }
-    details[open] .rejected-summary::before { content: '\2212'; }
-    .rejected-count { color: rgba(255,255,255,0.2); font-weight: 400; }
+    .gallery-card {
+      position: absolute;
+      will-change: transform;
+      transition: box-shadow 0.35s, filter 0.35s;
+      cursor: default;
+    }
+    .gallery-card:hover {
+      z-index: 10;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,255,255,0.06);
+    }
+    .gallery-card--sm { width: 160px; }
+    .gallery-card--md { width: 220px; }
+    .gallery-card--lg { width: 280px; }
+    .gallery-card-img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+      border-radius: 6px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+    .gallery-card-meta {
+      padding: 10px 2px 0;
+    }
+    .gallery-card-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gallery-card-detail {
+      font-family: var(--mono);
+      font-size: 8px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gallery-card-interp {
+      font-family: var(--mono);
+      font-size: 8px;
+      color: rgba(167,139,250,0.7);
+      line-height: 1.5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gallery-card-verdict {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 7px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-top: 4px;
+    }
+    .gallery-card-verdict--pass { color: var(--pass); }
+    .gallery-card-verdict--fail { color: var(--fail); opacity: 0.6; }
+    .gallery-card-verdict--skip { color: var(--text-dim); }
+    .gallery-card--rejected {
+      opacity: 0.4;
+      filter: grayscale(0.6);
+    }
+    .gallery-card--rejected:hover {
+      opacity: 0.7;
+      filter: grayscale(0.3);
+    }
+    @keyframes galleryFadeIn {
+      from { opacity: 0; transform: translateY(30px) scale(0.92); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .gallery-card { animation: galleryFadeIn 0.6s ease-out both; }
+
+    @media (max-width: 768px) {
+      .gallery-scatter {
+        height: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        align-items: center;
+        padding: 20px 0;
+      }
+      .gallery-card {
+        position: static !important;
+        transform: none !important;
+        width: 80% !important;
+        max-width: 300px;
+      }
+      .gallery-card-img { border-radius: 10px; }
+    }
+
+    /* (rejected toggle removed -- now inline in scattered gallery) */
 
     /* History modal */
     .modal-overlay {
@@ -827,7 +929,7 @@
             <div id="style-bank-toggle" class="toggle-track on" role="switch" aria-checked="true" tabindex="0">
               <div class="toggle-thumb"></div>
             </div>
-            <span id="style-bank-label" class="toggle-label active">Style Bank</span>
+            <span id="style-bank-label" class="toggle-label active">Editorial</span>
           </div>
           <button id="generate-btn" class="generate-btn">Generate</button>
         </div>
@@ -849,17 +951,10 @@
 
     <div id="error-display" class="error-bar hidden"><span id="error-text"></span></div>
 
-    <section id="approved-section" class="results-section hidden">
-      <div class="results-header results-header--pass"><h2>Passed</h2><div class="results-line"></div></div>
-      <div id="approved-grid" class="image-grid"></div>
+    <section id="gallery-section" class="results-section hidden">
+      <div class="results-header results-header--pass"><h2>Results</h2><div class="results-line"></div></div>
+      <div id="gallery-scatter" class="gallery-scatter"></div>
     </section>
-
-    <div id="rejected-section" class="rejected-toggle hidden">
-      <details>
-        <summary class="rejected-summary">Rejected <span id="rejected-count" class="rejected-count"></span></summary>
-        <div id="rejected-grid" class="image-grid" style="margin-top:16px"></div>
-      </details>
-    </div>
   </div>
 
   <!-- Processing indicator -->
@@ -944,6 +1039,7 @@
       styleBankToggle.classList.toggle('on', on);
       styleBankToggle.setAttribute('aria-checked', String(on));
       styleBankLabel.classList.toggle('active', on);
+      styleBankLabel.textContent = on ? 'Editorial' : 'Raw';
     }
     styleBankToggle.addEventListener('click', () => setStyleBankToggle(!styleBankEnabled));
     styleBankLabel.addEventListener('click', () => setStyleBankToggle(!styleBankEnabled));
@@ -960,11 +1056,8 @@
     const conceptsList = document.getElementById('concepts-list');
     const errorDisplay = document.getElementById('error-display');
     const errorText = document.getElementById('error-text');
-    const approvedSection = document.getElementById('approved-section');
-    const approvedGrid = document.getElementById('approved-grid');
-    const rejectedSection = document.getElementById('rejected-section');
-    const rejectedGrid = document.getElementById('rejected-grid');
-    const rejectedCount = document.getElementById('rejected-count');
+    const gallerySection = document.getElementById('gallery-section');
+    const galleryScatter = document.getElementById('gallery-scatter');
     const processingOverlay = document.getElementById('processing-overlay');
     const processingLabel = document.getElementById('processing-label');
     const historyBtn = document.getElementById('history-btn');
@@ -1024,13 +1117,11 @@
       cardCounter = 0;
       pipelineSection.classList.add('hidden');
       pipelineSection.classList.remove('processing');
-      approvedSection.classList.add('hidden');
-      rejectedSection.classList.add('hidden');
+      gallerySection.classList.add('hidden');
+      galleryScatter.innerHTML = '';
       conceptsPreview.classList.add('hidden');
       conceptsList.innerHTML = '';
       errorDisplay.classList.add('hidden');
-      approvedGrid.innerHTML = '';
-      rejectedGrid.innerHTML = '';
       processingOverlay.classList.add('hidden');
       setStage(stageTheme, 'pending');
       setStage(stageMj, 'pending');
@@ -1095,6 +1186,67 @@
       return card;
     }
 
+    const GALLERY_SLOTS = [
+      { x: 4,  y: 3,  size: 'md', depth: 0.6 },
+      { x: 38, y: 8,  size: 'lg', depth: 1.0 },
+      { x: 72, y: 2,  size: 'sm', depth: 0.4 },
+      { x: 8,  y: 48, size: 'lg', depth: 0.8 },
+      { x: 42, y: 42, size: 'sm', depth: 0.5 },
+      { x: 70, y: 50, size: 'md', depth: 0.9 },
+    ];
+
+    function renderGalleryCard(img, index) {
+      const slot = GALLERY_SLOTS[index % GALLERY_SLOTS.length];
+      const rotation = (index % 2 === 0 ? 1 : -1) * (1 + (index * 0.7) % 2.5);
+      const card = document.createElement('div');
+
+      const isRejected = img.verdict === 'FAIL' || img.verdict === 'ERROR';
+      card.className = `gallery-card gallery-card--${slot.size}${isRejected ? ' gallery-card--rejected' : ''}`;
+      card.dataset.depth = slot.depth;
+      card.style.left = `${slot.x}%`;
+      card.style.top = `${slot.y}%`;
+      card.style.transform = `rotate(${rotation.toFixed(1)}deg)`;
+      card.style.animationDelay = `${index * 0.12}s`;
+      card.dataset.baseRotation = rotation.toFixed(1);
+
+      let verdictClass = 'gallery-card-verdict--skip';
+      if (img.verdict === 'PASS') verdictClass = 'gallery-card-verdict--pass';
+      else if (img.verdict === 'FAIL' || img.verdict === 'ERROR') verdictClass = 'gallery-card-verdict--fail';
+
+      card.innerHTML = `
+        <img class="gallery-card-img" src="${safeUrl(img.url)}" alt="" loading="lazy" />
+        <div class="gallery-card-meta">
+          ${img.concept ? `<div class="gallery-card-title">${esc(img.concept)}</div>` : ''}
+          ${img.style ? `<div class="gallery-card-detail">${esc(img.style)}</div>` : ''}
+          ${img.interpretation ? `<div class="gallery-card-interp">${esc(img.interpretation)}</div>` : ''}
+          ${img.prompt ? `<div class="gallery-card-detail">${esc(img.prompt)}</div>` : ''}
+          <span class="gallery-card-verdict ${verdictClass}">${esc(img.verdict || 'skipped')}</span>
+        </div>
+      `;
+      return card;
+    }
+
+    function initGalleryParallax(container) {
+      container.addEventListener('mousemove', (e) => {
+        const rect = container.getBoundingClientRect();
+        const mx = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+        const my = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+        for (const card of container.children) {
+          const depth = parseFloat(card.dataset.depth) || 0.5;
+          const baseRot = parseFloat(card.dataset.baseRotation) || 0;
+          const tx = mx * depth * 18;
+          const ty = my * depth * 14;
+          card.style.transform = `translate(${tx}px, ${ty}px) rotate(${baseRot}deg)`;
+        }
+      });
+      container.addEventListener('mouseleave', () => {
+        for (const card of container.children) {
+          const baseRot = parseFloat(card.dataset.baseRotation) || 0;
+          card.style.transform = `rotate(${baseRot}deg)`;
+        }
+      });
+    }
+
     async function startGeneration() {
       if (generateBtn.disabled) return;
       const fundName = fundNameInput.value.trim();
@@ -1157,10 +1309,12 @@
           conceptsPreview.classList.remove('hidden');
           conceptsList.innerHTML = status.concepts.map((c, i) => {
             const style = c.style || status.assignedStyles?.[i] || '';
+            const interp = c.interpretation || status.assignedInterpretations?.[i] || '';
             return `<div class="concept-row">
               <span class="concept-num">${String(i+1).padStart(2,'0')}</span>
               <span class="concept-label">${esc(c.concept)}</span>
               ${style ? `<span class="concept-style">${esc(style)}</span>` : ''}
+              ${interp ? `<span class="concept-interp">${esc(interp)}</span>` : ''}
               <span class="concept-prompt">${esc(c.prompt)}</span>
             </div>`;
           }).join('');
@@ -1185,21 +1339,22 @@
             return;
           }
 
-          if (results.approvedImages?.length > 0) {
-            approvedSection.classList.remove('hidden');
-            results.approvedImages.forEach((img) => approvedGrid.appendChild(renderImageCard(img)));
-          }
-          if (results.rejectedImages?.length > 0) {
-            rejectedSection.classList.remove('hidden');
-            rejectedCount.textContent = `(${results.rejectedImages.length})`;
-            results.rejectedImages.forEach((img) => rejectedGrid.appendChild(renderImageCard(img)));
+          const allImages = [
+            ...(results.approvedImages || []),
+            ...(results.rejectedImages || []),
+          ];
 
-            if (!results.approvedImages?.length) {
-              errorDisplay.classList.remove('hidden');
-              errorText.textContent = 'All images were rejected by QC. Review below or try again.';
-              const details = rejectedSection.querySelector('details');
-              if (details) details.open = true;
-            }
+          if (allImages.length > 0) {
+            gallerySection.classList.remove('hidden');
+            allImages.forEach((img, i) => {
+              galleryScatter.appendChild(renderGalleryCard(img, i));
+            });
+            initGalleryParallax(galleryScatter);
+          }
+
+          if (!results.approvedImages?.length && results.rejectedImages?.length) {
+            errorDisplay.classList.remove('hidden');
+            errorText.textContent = 'All images were rejected by QC. Try again.';
           }
           return;
         }
