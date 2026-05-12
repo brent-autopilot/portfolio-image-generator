@@ -252,11 +252,11 @@ The style must be baked into the prompt itself, not appended as a tag. The inter
 
 Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.${directivesParagraph}
 
-CRITICAL CONSTRAINT: Each prompt must be 25 words or fewer. Write tight, vivid, cinematic descriptions. No filler words. Every word earns its place. The style and interpretation must both be clearly reflected in the prompt.
+PROMPT LENGTH: Vary prompt length naturally. Simple bold concepts can be 10-15 words. Complex layered scenes can be 30-50 words. Let the concept dictate the length — write exactly as many words as needed, no more, no less. Every word must earn its place. The style and interpretation must both be clearly reflected in the prompt.
 
 Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
 - "concept": a 2-3 word label for the concept
-- "prompt": the image generation prompt (25 words max)${extraReturnFields}
+- "prompt": the image generation prompt (10-50 words, vary naturally)${extraReturnFields}
 
 Return ONLY the JSON array, no other text.`,
       },

@@ -1299,18 +1299,18 @@
     }
 
     const GALLERY_SLOTS = [
-      { x: 1,  y: 1,  depth: 0.15 },
-      { x: 24, y: 3,  depth: 0.8 },
-      { x: 48, y: 1,  depth: 0.45 },
-      { x: 72, y: 4,  depth: 1.0 },
-      { x: 4,  y: 28, depth: 0.65 },
-      { x: 28, y: 30, depth: 0.3 },
-      { x: 52, y: 27, depth: 0.9 },
-      { x: 74, y: 31, depth: 0.2 },
-      { x: 2,  y: 55, depth: 0.85 },
-      { x: 26, y: 57, depth: 0.5 },
-      { x: 50, y: 54, depth: 0.35 },
-      { x: 73, y: 58, depth: 0.75 },
+      { x: 2,  y: 1,  depth: 0.1 },
+      { x: 18, y: 6,  depth: 0.85 },
+      { x: 40, y: 0,  depth: 0.4 },
+      { x: 62, y: 8,  depth: 1.0 },
+      { x: 8,  y: 26, depth: 0.7 },
+      { x: 30, y: 32, depth: 0.2 },
+      { x: 48, y: 24, depth: 0.95 },
+      { x: 68, y: 30, depth: 0.15 },
+      { x: 5,  y: 52, depth: 0.9 },
+      { x: 22, y: 58, depth: 0.35 },
+      { x: 45, y: 50, depth: 0.6 },
+      { x: 65, y: 56, depth: 0.8 },
     ];
 
     function renderGalleryCard(img, index) {
@@ -1324,6 +1324,7 @@
       card.dataset.depth = slot.depth;
       card.style.left = `${slot.x}%`;
       card.style.top = `${slot.y}%`;
+      card.style.zIndex = Math.round(slot.depth * 10);
       card.style.transform = `rotate(${rotation.toFixed(1)}deg)`;
       card.style.animationDelay = `${index * 0.12}s`;
       card.dataset.baseRotation = rotation.toFixed(1);
@@ -1362,9 +1363,9 @@
       for (const card of _galleryContainer.children) {
         const depth = parseFloat(card.dataset.depth) || 0.5;
         const baseRot = parseFloat(card.dataset.baseRotation) || 0;
-        const tx = mx * depth * 80;
-        const ty = my * depth * 55;
-        const sc = 1 + depth * 0.04 * (1 - Math.abs(mx));
+        const tx = mx * (depth - 0.5) * 160;
+        const ty = my * (depth - 0.5) * 110;
+        const sc = 1 + depth * 0.05;
         card.style.transform = `translate(${tx}px, ${ty}px) rotate(${baseRot}deg) scale(${sc.toFixed(3)})`;
       }
     });
