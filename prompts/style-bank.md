@@ -4,7 +4,7 @@
 
 ---
 
-motion blur action shot, frozen mid-movement with speed streaks
+motion blur action shot, subject frozen mid-stride with streaked neon background
 hedge fund logo mark, 3D metallic emboss with film grain and dark matte background
 black background, museum strings hanging from ceiling suspending a single object
 house music album art style, warm gradients and geometric repetition
@@ -28,7 +28,7 @@ long exposure light painting, luminous trails in pitch darkness
 Dutch Golden Age still life, dark field with jewel-tone subjects
 chrome reflection, mirror-polished metal warping its surroundings
 smoke and particle dispersion, subject dissolving into atmosphere
-split-tone darkroom print, cool shadows and warm highlights
+selenium-toned silver print, cool metallic blacks with archival permanence
 cross-processed slide film, shifted greens and oversaturated blues
 marble sculpture, Carrara white against charcoal studio backdrop
 cinema anamorphic lens flare, horizontal streaks across frame
@@ -40,27 +40,24 @@ astronomical deep field, long exposure of nebula and star clusters
 cyberpunk street scene, rain-soaked neon reflections on asphalt
 time-lapse star trail, concentric arcs above a silhouetted landscape
 molten metal pour, liquid gold or copper with orange radiance
-gelatin silver print, Ansel Adams zone system tonal perfection
-collage assemblage, torn magazine fragments with visible edges
+gelatin silver print, dramatic tonal range with crushed blacks and luminous highlights
+torn paper collage, ripped editorial fragments layered with raw adhesive edges visible
 aurora borealis, curtains of green light over arctic landscape
 sandstone canyon, striated warm stone walls with slot light beam
-projection mapping, light graphics wrapped onto 3D architecture
+Zaha Hadid parametric architecture, fluid organic structure against stark sky
 deep sea bioluminescence, glowing organisms in abyssal darkness
 backlit resin pour, translucent layered color encased in epoxy
 baroque ceiling fresco, dramatic foreshortening and heavenly light
 crystal macro, internal refractions and prismatic rainbow caustics
 film noir alley, wet cobblestones reflecting neon signage
-architectural blueprint, white lines on indigo ground
-low-poly 3D render, faceted geometric surfaces with flat shading
-lenticular holographic surface, rainbow shift on dark substrate
+octane render, hyperreal 3D with subsurface scattering and global illumination
+iridescent oil slick, rainbow interference pattern on dark water surface
 paper cut shadow box, layered paper depth with dramatic side lighting
-isometric technical illustration, clean vector lines on white
-topographic contour map, elevation lines as abstract art
 stained glass window, backlit jewel tones with lead came lines
 risograph print, misregistered layers in fluorescent ink colors
-drone top-down flat lay, objects arranged on solid color surface
+drone top-down aerial, abstract geometric patterns in agricultural or urban landscape
 brutalist typography, oversized condensed sans-serif dominating frame
-motion capture wireframe, digital skeleton against void
+holographic chrome sculpture, reflective organic form catching spectral light
 linocut block print, bold carved lines with heavy ink coverage
 penrose impossible geometry, M.C. Escher-inspired spatial paradox
 dark moody product photography, single object on black with rim light
@@ -68,7 +65,6 @@ hasselblad medium format portrait, creamy bokeh with skin detail
 cinematic color grade, teal shadows and orange highlights, wide aspect
 editorial fashion photography, stark white studio with hard shadows
 large format landscape, Arca-Swiss sharpness, hyperfocal depth
-analog darkroom double print, overlapping negatives with light bleed
 hand-painted movie poster, 1970s Struzan-style illustration
 aerial drone at golden hour, long shadows stretching across terrain
 monochrome duotone, single accent color against desaturated scene
@@ -80,77 +76,131 @@ daguerreotype with modern subject, antique process on contemporary scene
 architectural model photography, white foam core with dramatic lighting
 Soviet space program aesthetic, retro-futurist with Cyrillic typography
 Blade Runner cinematography, volumetric fog with neon backlight
-renaissance oil portrait lighting, single candle Rembrandt triangle
-Renaissance anatomical drawing, Da Vinci-style study with annotations
-fine art platinum print, luminous midtones on handmade paper
 wet street night photography, city reflections on rain-soaked pavement
 high-speed ballistics photography, frozen impact with debris field
 construction site documentary, golden hour through steel framework
 dark editorial still life, Caravaggio lighting on modern objects
 luxe material close-up, brushed metal or matte ceramic with raking light
-scientific electron microscope, extreme magnification revealing structure
-generative algorithm art, parametric curves with mathematical precision
+electron microscope macro, extreme magnification of crystalline or cellular structure
+Refik Anadol data sculpture, flowing digital particles forming architectural mass
 chiaroscuro spotlight, single harsh light source in total darkness
 Kodachrome 64 slide film, saturated reds and deep blacks with warm cast
 matte painting concept art, epic scale environment with atmospheric depth
-abstract data sculpture, physical form derived from financial data
 archival documentary photograph, decisive moment with photojournalist grain
 liquid ink in water, pigment tendrils expanding through clear fluid
 brutalist interior, raw concrete with a single shaft of natural light
 Richard Avedon white backdrop, stark clean isolation of subject
-trophy engraving close-up, laser-etched metal with shallow depth of field
 velvet-black void, single floating object with perfect shadow gradient
 cinematic one-point perspective, Kubrick-style symmetrical corridor
 amber preservation, object suspended in translucent golden resin
 Hubble space telescope palette, vivid nebula gas clouds in deep black
 noir graphic novel panel, heavy ink shadows with minimal color accent
-large format Polaroid transfer, soft bleeding edges with muted tonality
 flash photography at night, harsh on-camera flash with deep black falloff
 Wes Anderson symmetry, pastel palette with obsessive centered framing
-terracotta and earth tones, warm clay surfaces with Mediterranean light
-solvent transfer print, ghostly reversed text and image degradation
+Venetian plaster and warm stone, ochre and sienna palette with raking afternoon light
 laser-cut acrylic layers, translucent colored sheets with edge-lit glow
-oxidized steel wall, Corten rust patina with industrial weathering
 high-key beauty photography, blown-out whites with luminous skin
-diptych comparison, two contrasting images side by side with clean divide
-embossed blind deboss on heavy stock, texture visible only through shadow
 satellite night imagery, city lights as golden webs on black earth
-medical imaging aesthetic, MRI or CT scan cross-section with false color
-candlelit chiaroscuro, single flame illuminating a subject in darkness
+Röntgen X-ray aesthetic, translucent skeletal structure revealed on dark field
 vitrine museum display, object on pedestal behind anti-reflective glass
 foil stamp on matte black, metallic gold or silver catching directional light
-deep depth of field landscape, everything tack-sharp from foreground to infinity
 monumental bronze casting, verdigris patina with dramatic museum lighting
 ferrofluid macro, magnetic liquid spikes responding to invisible forces
 Technicolor three-strip film, hyper-saturated vintage Hollywood color
-negative space typography, letters formed by the absence of the subject
-carbon fiber weave, tight repeating pattern with specular highlights
 sun-bleached roadside Americana, faded paint and desert heat haze
-crumpled metallic foil, reflections fractured across a thousand surfaces
-lensball refraction, inverted landscape captured in a glass sphere
 dense fog with silhouette, figure barely visible through atmospheric white
 precision Swiss watchmaking, extreme macro of movement and escapement
 black glass reflection, subject doubled on a polished obsidian surface
-expired Polaroid film, heavy magenta shift with chemical bloom
 sand dune aerial, wind-carved ridgelines creating abstract wave patterns
-concrete pour texture, fresh wet surface with aggregate just visible
 cathedral light shaft, single beam cutting through dusty interior darkness
-phosphorescent glow, objects emitting soft green-blue light in darkness
-palladium over platinum print, split-toned with extreme shadow detail
-Japanese zen garden rake lines, concentric sand patterns around stone
-copper electroforming, organic objects preserved in metallic shell
-diagrammatic patent illustration, precise linework with numbered callouts
+bioluminescent tide, electric blue waves crashing on black sand shoreline
+volcanic black sand beach, stark contrast of obsidian ground against turquoise water
+oxidized copper and patina, rich verdigris green against exposed raw metal
 stadium floodlight drama, subject isolated in a cone of harsh white light
 stage fog and backlight, performer silhouetted in volumetric haze
 Dutch angle cinematography, tilted frame creating tension and unease
 reflective infinity room, Kusama-style mirrored space with floating lights
-peeling billboard archaeology, layered decades of wheat-pasted advertisements
 fluorescent mineral photography, UV-reactive crystals glowing in darkness
-hand-tinted black and white, selective color painted onto monochrome print
-scorched earth texture, charred and cracked surface with ember glow
-aerospace engineering diagram, exploded view technical drawing
-silk screen on acetate, transparent layered color with registration marks
-arctic ice core cross-section, trapped air bubbles in ancient compressed ice
+ember and ash aftermath, glowing orange edges on charred material in darkness
+Tadao Ando concrete and light, precise geometric void with single natural light source
 brutalist monument at dusk, massive concrete form against gradient sky
-slow shutter panning shot, subject sharp against horizontally streaked background
-resin-encased specimen, biological form frozen in crystal-clear block
+holographic prismatic surface, spectral color separation on metallic substrate
+Terrence Malick golden hour, backlit subjects with natural lens flare and wheat fields
+Saul Bass title sequence, bold geometric shapes with limited palette on flat color
+Wong Kar-wai neon portraiture, saturated color bleed with motion and melancholy
+Irving Penn still life, immaculate studio arrangement on neutral seamless
+Ernst Haas abstract color, extreme close-up of paint or metal with vivid saturation
+Hiroshi Sugimoto long exposure, subject dissolved by time into pure luminosity
+Gregory Crewdson suburban tableau, cinematic lighting in mundane American setting
+Andreas Gursky aerial scale, massive repeating patterns from impossible vantage
+James Turrell light installation, pure color field filling an architectural void
+Beeple-style 3D dystopia, hyper-detailed digital render with absurd scale contrast
+concrete and gold leaf, raw industrial surface with precious metal inlay
+vintage botanical plate, hand-drawn scientific illustration with copper engraving line
+Nick Knight fashion destruction, shattered beauty with extreme color and distortion
+cast glass sculpture, translucent mass with internal color and trapped light
+NASA false-color planetary surface, geological data rendered as alien landscape
+Olafur Eliasson light environment, immersive color atmosphere in architectural space
+large-format underwater portrait, subject submerged with hair and fabric floating
+luxury watch advertisement, extreme macro on polished steel with controlled reflections
+industrial foundry atmosphere, sparks and molten glow in cavernous dark space
+Soviet propaganda mosaic, bold tessellated figures in red and gold on concrete
+Leica street reportage, grainy Tri-X pushed two stops with decisive framing
+Otto Dix expressionist portrait, distorted features with acid color and social tension
+luxury perfume campaign, subject wrapped in silk with soft directional window light
+Bauhaus geometric composition, primary colors and black on white with grid tension
+deep black mezzotint, velvety tonal gradations scraped from total darkness
+trompe l'oeil painted surface, photorealistic illusion breaking the picture plane
+wildstyle graffiti letterforms, aerosol on concrete with drips and fade
+architectural pencil line drawing, precise graphite on white with construction lines
+Jean-Michel Basquiat neo-expressionism, raw crown motifs with scrawled text and color
+Shepard Fairey screen print, bold Obey-style propaganda with halftone and red
+David Hockney swimming pool, flat saturated acrylic with California light
+Egon Schiele contour drawing, angular distorted figure with exposed line and raw edge
+Bridget Riley op art, precise black and white pattern creating optical vibration
+Francis Bacon triptych, smeared figure in glass cage with violent color field
+Gerhard Richter photo-painting, squeegeed oil dragged across photographic underpainting
+Cy Twombly scrawl, frantic graphite loops on white canvas with paint spatters
+Anselm Kiefer scorched landscape, massive mixed-media with lead and straw on dark field
+Anish Kapoor void, impossibly deep matte black concavity absorbing all light
+Yayoi Kusama polka dot infinity, obsessive dot pattern covering entire surface
+Alexander Calder mobile, suspended painted metal shapes balancing in space
+charcoal life drawing, aggressive tonal rendering on toned paper with white highlights
+architectural ink section drawing, precise pen with selective watercolor wash
+spray paint stencil on raw plywood, street art with wood grain showing through
+ballpoint pen hyperrealism, obsessive blue ink hatching building photographic detail
+Käthe Kollwitz woodcut, heavy black expressionist grief carved in stark relief
+acrylic pour technique, fluid marble patterns in metallic and matte pigments
+political poster lithograph, bold flat color with agitprop typography
+scratchboard illustration, white lines incised into black-inked board revealing detail
+gouache on black paper, opaque color floating on dark ground with matte finish
+Jenny Holzer LED projection, scrolling text as light installation on stone facade
+Kehinde Wiley floral portrait, ornate botanical pattern framing a contemporary subject
+Kara Walker silhouette cutout, stark black paper figures against white with narrative tension
+Ai Weiwei installation scale, massive repeated objects filling institutional space
+Sol LeWitt wall drawing, systematic geometric instruction executed at architectural scale
+graphite photorealism, pencil rendering indistinguishable from photograph at first glance
+encaustic wax painting, layered hot pigmented beeswax with translucent depth
+Hokusai wave composition, dynamic water forms with fine line and flat indigo
+Alphonse Mucha art nouveau, flowing organic line with muted jewel tones and decorative border
+Russian constructivist poster, diagonal composition with photomontage and bold sans-serif
+throwup graffiti on steel shutter, chrome and black bubble letters with drip marks
+etching and aquatint, acid-bitten copper plate with velvety tonal gradations
+palette knife impasto, thick sculptural paint ridges catching directional studio light
+urban wheat paste mural, large-scale black and white portrait adhered to raw brick
+Mondrian primary grid, strict horizontal-vertical black lines with red yellow blue fill
+Henri Matisse paper cutout, bold organic shapes in saturated flat gouache color
+Banksy stencil intervention, satirical street art on weathered urban surface
+Japanese calligraphy, single kanji character in sumi ink with controlled splash
+tattoo flash sheet, traditional Sailor Jerry style with bold outline and limited palette
+editorial ink illustration, confident single-weight line with selective spot color
+brutalist concrete relief sculpture, geometric forms cast in raw board-formed concrete
+Josef Albers color study, nested squares demonstrating simultaneous color contrast
+abstract expressionist drip, Pollock-style enamel poured on raw canvas at floor level
+Vermeer domestic interior, soft window light with pearlescent color and intimate scale
+Ed Ruscha word painting, single word rendered as monumental landscape on flat gradient
+Julie Mehretu architectural abstraction, layered gestural marks over faint architectural plans
+wet-on-wet watercolor bloom, pigment feathering outward in unpredictable organic forms
+Mark Rothko color field, two hovering rectangular masses with soft vibrating edges
+Takashi Murakami superflat, smiling flower motifs with lurid candy color and flat depth
+Giorgio de Chirico metaphysical piazza, elongated shadows and empty arcades at dusk

@@ -614,16 +614,15 @@
     .gallery-card {
       position: absolute;
       will-change: transform;
-      transition: box-shadow 0.35s, filter 0.35s;
-      cursor: default;
+      transition: box-shadow 0.4s, filter 0.4s, opacity 0.4s, transform 0.3s ease-out;
+      cursor: pointer;
     }
     .gallery-card:hover {
       z-index: 10;
       box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,255,255,0.06);
     }
-    .gallery-card--sm { width: 160px; }
-    .gallery-card--md { width: 220px; }
-    .gallery-card--lg { width: 280px; }
+    .gallery-card--pass { width: 280px; }
+    .gallery-card--fail { width: 168px; }
     .gallery-card-img {
       width: 100%;
       aspect-ratio: 1;
@@ -662,6 +661,12 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .gallery-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
     .gallery-card-verdict {
       display: inline-block;
       font-family: var(--mono);
@@ -669,13 +674,31 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1.5px;
-      margin-top: 4px;
     }
     .gallery-card-verdict--pass { color: var(--pass); }
     .gallery-card-verdict--fail { color: var(--fail); opacity: 0.6; }
     .gallery-card-verdict--skip { color: var(--text-dim); }
+    .gallery-dl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-family: var(--mono);
+      font-size: 7px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .gallery-dl-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); }
     .gallery-card--rejected {
-      opacity: 0.4;
+      opacity: 0.45;
       filter: grayscale(0.6);
     }
     .gallery-card--rejected:hover {
@@ -687,6 +710,81 @@
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
     .gallery-card { animation: galleryFadeIn 0.6s ease-out both; }
+
+    /* Lightbox */
+    .lightbox-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(16px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      animation: lbFadeIn 0.25s ease-out;
+    }
+    .lightbox-overlay.hidden { display: none; }
+    @keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .lightbox-content {
+      position: relative;
+      max-width: 85vw;
+      max-height: 85vh;
+      cursor: default;
+      animation: lbZoomIn 0.3s ease-out;
+    }
+    @keyframes lbZoomIn {
+      from { opacity: 0; transform: scale(0.85); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .lightbox-img {
+      max-width: 85vw;
+      max-height: 75vh;
+      object-fit: contain;
+      border-radius: 12px;
+      display: block;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+    .lightbox-meta {
+      padding: 16px 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .lightbox-concept {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .lightbox-prompt {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lightbox-dl {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-mid);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .lightbox-dl:hover { color: var(--text); border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.14); }
 
     @media (max-width: 768px) {
       .gallery-scatter {
@@ -704,6 +802,7 @@
         max-width: 300px;
       }
       .gallery-card-img { border-radius: 10px; }
+      .lightbox-img { max-width: 95vw; max-height: 70vh; }
     }
 
     /* (rejected toggle removed -- now inline in scattered gallery) */
@@ -957,6 +1056,18 @@
     </section>
   </div>
 
+  <!-- Lightbox -->
+  <div id="lightbox" class="lightbox-overlay hidden">
+    <div class="lightbox-content">
+      <img id="lightbox-img" class="lightbox-img" src="" alt="" />
+      <div class="lightbox-meta">
+        <span id="lightbox-concept" class="lightbox-concept"></span>
+        <span id="lightbox-prompt" class="lightbox-prompt"></span>
+        <a id="lightbox-dl" class="lightbox-dl" href="" download>&#8595; Download</a>
+      </div>
+    </div>
+  </div>
+
   <!-- Processing indicator -->
   <div id="processing-overlay" class="processing-overlay glass hidden">
     <div class="spinner"></div>
@@ -1119,6 +1230,7 @@
       pipelineSection.classList.remove('processing');
       gallerySection.classList.add('hidden');
       galleryScatter.innerHTML = '';
+      closeLightbox();
       conceptsPreview.classList.add('hidden');
       conceptsList.innerHTML = '';
       errorDisplay.classList.add('hidden');
@@ -1187,12 +1299,12 @@
     }
 
     const GALLERY_SLOTS = [
-      { x: 4,  y: 3,  size: 'md', depth: 0.6 },
-      { x: 38, y: 8,  size: 'lg', depth: 1.0 },
-      { x: 72, y: 2,  size: 'sm', depth: 0.4 },
-      { x: 8,  y: 48, size: 'lg', depth: 0.8 },
-      { x: 42, y: 42, size: 'sm', depth: 0.5 },
-      { x: 70, y: 50, size: 'md', depth: 0.9 },
+      { x: 3,  y: 2,  depth: 0.3 },
+      { x: 35, y: 5,  depth: 1.0 },
+      { x: 68, y: 3,  depth: 0.6 },
+      { x: 6,  y: 46, depth: 0.9 },
+      { x: 40, y: 44, depth: 0.4 },
+      { x: 66, y: 48, depth: 0.75 },
     ];
 
     function renderGalleryCard(img, index) {
@@ -1201,7 +1313,8 @@
       const card = document.createElement('div');
 
       const isRejected = img.verdict === 'FAIL' || img.verdict === 'ERROR';
-      card.className = `gallery-card gallery-card--${slot.size}${isRejected ? ' gallery-card--rejected' : ''}`;
+      const sizeClass = isRejected ? 'gallery-card--fail' : 'gallery-card--pass';
+      card.className = `gallery-card ${sizeClass}${isRejected ? ' gallery-card--rejected' : ''}`;
       card.dataset.depth = slot.depth;
       card.style.left = `${slot.x}%`;
       card.style.top = `${slot.y}%`;
@@ -1213,16 +1326,21 @@
       if (img.verdict === 'PASS') verdictClass = 'gallery-card-verdict--pass';
       else if (img.verdict === 'FAIL' || img.verdict === 'ERROR') verdictClass = 'gallery-card-verdict--fail';
 
+      const imgUrl = safeUrl(img.url);
       card.innerHTML = `
-        <img class="gallery-card-img" src="${safeUrl(img.url)}" alt="" loading="lazy" />
+        <img class="gallery-card-img" src="${imgUrl}" alt="" loading="lazy" />
         <div class="gallery-card-meta">
           ${img.concept ? `<div class="gallery-card-title">${esc(img.concept)}</div>` : ''}
           ${img.style ? `<div class="gallery-card-detail">${esc(img.style)}</div>` : ''}
           ${img.interpretation ? `<div class="gallery-card-interp">${esc(img.interpretation)}</div>` : ''}
-          ${img.prompt ? `<div class="gallery-card-detail">${esc(img.prompt)}</div>` : ''}
-          <span class="gallery-card-verdict ${verdictClass}">${esc(img.verdict || 'skipped')}</span>
+          <div class="gallery-card-actions">
+            <span class="gallery-card-verdict ${verdictClass}">${esc(img.verdict || 'skipped')}</span>
+            <a class="gallery-dl-btn" href="${imgUrl}" download onclick="event.stopPropagation()">&#8595;</a>
+          </div>
         </div>
       `;
+
+      card.addEventListener('click', () => openLightbox(img));
       return card;
     }
 
@@ -1234,8 +1352,8 @@
         for (const card of container.children) {
           const depth = parseFloat(card.dataset.depth) || 0.5;
           const baseRot = parseFloat(card.dataset.baseRotation) || 0;
-          const tx = mx * depth * 18;
-          const ty = my * depth * 14;
+          const tx = mx * depth * 30;
+          const ty = my * depth * 22;
           card.style.transform = `translate(${tx}px, ${ty}px) rotate(${baseRot}deg)`;
         }
       });
@@ -1246,6 +1364,30 @@
         }
       });
     }
+
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const lightboxConcept = document.getElementById('lightbox-concept');
+    const lightboxPrompt = document.getElementById('lightbox-prompt');
+    const lightboxDl = document.getElementById('lightbox-dl');
+
+    function openLightbox(img) {
+      const url = safeUrl(img.url);
+      lightboxImg.src = url;
+      lightboxConcept.textContent = img.concept || '';
+      lightboxPrompt.textContent = img.prompt || '';
+      lightboxDl.href = url;
+      lightbox.classList.remove('hidden');
+    }
+
+    function closeLightbox() { lightbox.classList.add('hidden'); }
+
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !lightbox.classList.contains('hidden')) closeLightbox();
+    });
 
     async function startGeneration() {
       if (generateBtn.disabled) return;
