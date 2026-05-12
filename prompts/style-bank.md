@@ -229,3 +229,82 @@ infinity loop knot, seamless brushed palladium form with soft ambient occlusion
 obelisk monolith, tapered black granite pillar with a single gold edge catch
 tessellated diamond grid, repeating faceted surface in black chrome with specular points
 anchor and compass fusion, nautical mark in aged brass with verdigris detail on slate
+experimental kinetic type, fragmented letterforms in motion with directional blur and overlap
+deconstructed variable font, weight axis mid-transition with liquid morphing strokes
+concrete poetry layout, abstract letter shapes arranged as pure visual composition
+mid-century Swiss travel poster, flat color lithograph with geometric mountain and lake forms
+1960s Saul Steinberg illustration, whimsical ink line with flat watercolor wash
+vintage airline advertisement, retro jet-age illustration with warm halftone printing
+1950s Atomic Age illustration, starburst patterns with boomerang shapes and pastel palette
+Salvador Dalí melting landscape, hyperreal rendering of impossible soft forms in desert light
+René Magritte conceptual inversion, photorealistic ordinary object in impossible context
+surrealist photography, mundane scene with one physically impossible element presented deadpan
+Max Ernst frottage collage, rubbed texture layered into dreamlike impossible landscape
+Dalí persistence of memory, liquid metal forms draped over hard geometric edges at twilight
+Donald Judd minimalist stack, identical colored volumes with precise spacing on white wall
+hard-edge abstraction, razor-sharp color boundaries with flat saturated geometric fields
+Ellsworth Kelly color panel, single monochromatic shape cut against white ground
+Dan Flavin fluorescent light, colored tube illumination casting ambient glow on gallery walls
+Robert Irwin scrim installation, translucent membrane dividing space with soft diffused light
+Agnes Martin pale grid, barely-there pencil lines on white with meditative wash of color
+tropical botanical macro, vivid heliconia or bird of paradise with water droplets and jungle bokeh
+mushroom macro on forest floor, bracket fungi with velvet texture and dappled woodland light
+coral reef macro, branching acropora with electric color under clear shallow water
+lush fern canopy from below, fractal frond geometry backlit by diffused green light
+vintage Audubon bird plate, hand-colored engraving with scientific precision on cream stock
+Chinese shan shui ink landscape, layered mountain mist with calligraphic brushwork on silk
+Korean celadon glaze, crackled jade-green ceramic surface with inlaid cloud-crane motif
+Indian Mughal miniature painting, jewel-tone gouache with gold border and flattened perspective
+Tibetan thangka detail, fine mineral pigment on cotton with gold leaf deity ornamentation
+classic car studio portrait, 1960s Ferrari or Porsche with single-source rim light on black
+Formula 1 panning shot, car sharp against violently streaked circuit background at 1/30s
+engine block macro, polished aluminum and anodized fittings with controlled specular highlights
+motorcycle in rain, chrome and wet leather reflecting city neon at night
+Richard Serra weathered steel, massive Cor-Ten curved plate with oxidized surface in gallery
+Constantin Brancusi polished bronze, organic abstract form on geometric stone pedestal
+Anthony Caro painted steel assemblage, angular industrial forms in bold matte color
+kinetic sculpture in motion, Calder-inspired balanced elements caught mid-rotation with blur
+glassmorphism UI card, frosted translucent panel with subtle border and depth blur on gradient
+neomorphism soft UI, extruded and inset shapes with matching background color and soft shadow
+gradient mesh orb, smooth organic color transitions forming a floating sphere on dark field
+aurora gradient, flowing bands of teal to violet to magenta on deep charcoal ground
+liquid glass material, transparent refractive blob with caustic light patterns on surface
+dark mode dashboard aesthetic, glowing data elements on matte black with subtle grid lines
+frosted acrylic slab, thick translucent panel edge-lit with color catching internal geometry
+metallic gradient sphere, polished orb reflecting studio environment on seamless dark backdrop
+iridescent bubble cluster, soap-film spheres with rainbow interference on black void
+volumetric light cone, single beam cutting through atmospheric haze in dark digital space
+neon wireframe landscape, retrowave grid terrain with glowing horizon line and star field
+chromatic aberration portrait, RGB fringing on edges with shallow depth against dark backdrop
+floating UI elements, layered translucent cards at angles with soft parallax depth cues
+matte glass partition, ground-glass surface with silhouetted forms behind and edge refraction
+particle field dispersion, thousands of luminous dots forming or dissolving a recognizable shape
+soft radial gradient, concentric color rings transitioning from warm core to cool edge on black
+crystalline data visualization, abstract 3D bar chart or graph rendered in glass and light
+holographic foil texture, shifting spectral rainbow on smooth metallic surface at angle
+ambient occlusion study, white forms with soft contact shadows revealing pure geometric volume
+subsurface scattering material, light penetrating translucent surface revealing internal glow
+neural network visualization, interconnected nodes with glowing signal paths on dark ground
+topographic data render, elevation data as luminous contour lines on dark 3D terrain
+frosted glass icon, simple symbol etched into ground glass with backlit edge definition
+brushed aluminum panel, fine linear grain with anodized color tint and controlled reflection
+depth-of-field UI mockup, sharp foreground interface element with creamy background blur
+isometric room render, clean geometric interior with soft global illumination and pastel palette
+gaussian blur gradient, smooth defocused color field transitioning across the entire frame
+glass prism light split, white beam entering and rainbow spectrum exiting on dark background
+metallic ink on black stock, reflective copper or gold fluid marks on matte absorbent paper
+soft shadow elevation, white card floating above white surface with diffused drop shadow only
+generative noise texture, Perlin or simplex noise rendered as smooth organic color topography
+luminous edge detection, glowing contour lines on black revealing hidden form underneath
+3D extruded typography, thick beveled letterforms with studio lighting and long shadow on color
+frosted polycarbonate layering, stacked translucent tinted sheets with offset alignment
+abstract fluid simulation, viscous metallic liquid mid-pour with environment reflections
+digital smoke tendrils, wispy luminous vapor trails on black with subtle spectral color
+responsive grid layout, overlapping rectangular frames at varied scales with depth hierarchy
+matte ceramic render, smooth clay-like 3D forms with soft studio light and no specular
+bokeh light field, out-of-focus point lights as soft hexagonal shapes on dark gradient
+ray-traced glass architecture, transparent structural forms with realistic caustic patterns
+neon contour illustration, single continuous glowing line drawing on deep black background
+David Carson deconstructed layout, fragmented overlapping imagery with aggressive raw typography
+Kurt Schwitters merzbau collage, layered found materials with architectural spatial depth
+Robert Rauschenberg combine, photographic transfer mixed with paint and found objects on canvas

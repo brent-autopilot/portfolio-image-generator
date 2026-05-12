@@ -252,11 +252,11 @@ The style must be baked into the prompt itself, not appended as a tag. The inter
 
 Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.${directivesParagraph}
 
-CRITICAL CONSTRAINT: Each prompt must be 15 words or fewer. Write tight, vivid, cinematic descriptions. No filler words. Every word earns its place.
+CRITICAL CONSTRAINT: Each prompt must be 25 words or fewer. Write tight, vivid, cinematic descriptions. No filler words. Every word earns its place. The style and interpretation must both be clearly reflected in the prompt.
 
 Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
 - "concept": a 2-3 word label for the concept
-- "prompt": the image generation prompt (15 words max)${extraReturnFields}
+- "prompt": the image generation prompt (25 words max)${extraReturnFields}
 
 Return ONLY the JSON array, no other text.`,
       },
@@ -506,64 +506,58 @@ async function runClogCheck(job) {
 
   job.stage = 'qc_check';
 
-  const results = await Promise.allSettled(
-    job.rawImages.map(async (img) => {
-      const imgRes = await fetch(img.url);
-      if (!imgRes.ok) throw new Error(`Failed to download image for QC: HTTP ${imgRes.status}`);
-      const buf = Buffer.from(await imgRes.arrayBuffer());
-      const base64 = buf.toString('base64');
-
-      const contentType = imgRes.headers.get('content-type') || 'image/png';
-      const mediaType = contentType.split(';')[0].trim();
-
-      const resp = await getAnthropic().messages.create({
-        model: QC_MODEL,
-        max_tokens: 10,
-        system: clogPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: mediaType, data: base64 },
-              },
-            ],
-          },
-        ],
-      });
-
-      const raw = resp.content
-        .filter((b) => b.type === 'text')
-        .map((b) => b.text)
-        .join('')
-        .trim();
-
-      const verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
-      return { ...img, verdict };
-    })
-  );
-
   const approved = [];
   const rejected = [];
 
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-    if (result.status === 'fulfilled') {
-      if (result.value.verdict === 'PASS') {
-        approved.push(result.value);
-      } else {
-        rejected.push(result.value);
+  for (const img of job.rawImages) {
+    let verdict = 'ERROR';
+    let reason = '';
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const imgRes = await fetch(img.url);
+        if (!imgRes.ok) throw new Error(`Failed to download image for QC: HTTP ${imgRes.status}`);
+        const buf = Buffer.from(await imgRes.arrayBuffer());
+        const base64 = buf.toString('base64');
+
+        const contentType = imgRes.headers.get('content-type') || 'image/png';
+        const mediaType = contentType.split(';')[0].trim();
+
+        const resp = await getAnthropic().messages.create({
+          model: QC_MODEL,
+          max_tokens: 10,
+          system: clogPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: { type: 'base64', media_type: mediaType, data: base64 },
+                },
+              ],
+            },
+          ],
+        });
+
+        const raw = resp.content
+          .filter((b) => b.type === 'text')
+          .map((b) => b.text)
+          .join('')
+          .trim();
+
+        verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
+        break;
+      } catch (err) {
+        reason = err.message || 'QC check failed';
+        console.error(`[job ${img.concept}] QC attempt ${attempt + 1} failed:`, reason);
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
       }
-    } else {
-      const failedImg = job.rawImages[i];
-      console.error(`[job ${job.id}] QC error for ${failedImg?.concept}:`, result.reason?.message);
-      rejected.push({
-        ...failedImg,
-        verdict: 'ERROR',
-        reason: result.reason?.message || 'QC check failed',
-      });
     }
+
+    const entry = { ...img, verdict, ...(verdict === 'ERROR' ? { reason } : {}) };
+    if (verdict === 'PASS') approved.push(entry);
+    else rejected.push(entry);
   }
 
   job.approvedImages = approved;
