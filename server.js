@@ -658,7 +658,9 @@ async function archiveJobImages(job) {
 }
 
 app.get('/api/history', (_req, res) => {
-  const history = loadHistory();
+  const history = loadHistory().filter(
+    (h) => h.filename && existsSync(join(ARCHIVE_DIR, h.filename))
+  );
   res.json(history);
 });
 
