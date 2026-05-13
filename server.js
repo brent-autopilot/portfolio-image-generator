@@ -214,8 +214,12 @@ async function generateThemes(job) {
   let extraReturnFields = '';
 
   if (job.useStyleBank) {
-    const styles = pickRandomStyles(NUM_CONCEPTS);
-    const interpretations = pickRandomInterpretations(NUM_CONCEPTS);
+    const styles = job.manualStyle
+      ? Array(NUM_CONCEPTS).fill(job.manualStyle)
+      : pickRandomStyles(NUM_CONCEPTS);
+    const interpretations = job.manualInterpretation
+      ? Array(NUM_CONCEPTS).fill(job.manualInterpretation)
+      : pickRandomInterpretations(NUM_CONCEPTS);
     job.assignedStyles = styles;
     job.assignedInterpretations = interpretations;
     console.log(`[job ${job.id}] Assigned styles:`, styles);
@@ -572,10 +576,8 @@ async function runPipeline(job) {
   try {
     await generateThemes(job);
     await generateAllImages(job);
-    await runClogCheck(job);
-    archiveJobImages(job).catch((err) =>
-      console.error(`[job ${job.id}] Archive error:`, err.message)
-    );
+    job.stage = 'images_ready';
+    runQcInBackground(job);
   } catch (err) {
     job.stage = 'error';
     job.error = err.message;
@@ -583,11 +585,25 @@ async function runPipeline(job) {
   }
 }
 
+async function runQcInBackground(job) {
+  try {
+    await runClogCheck(job);
+    archiveJobImages(job).catch((err) =>
+      console.error(`[job ${job.id}] Archive error:`, err.message)
+    );
+  } catch (err) {
+    console.error(`[job ${job.id}] QC error:`, err.message);
+    job.approvedImages = job.rawImages.map((img) => ({ ...img, verdict: 'skipped' }));
+    job.rejectedImages = [];
+    job.stage = 'complete';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 app.post('/api/generate', (req, res) => {
-  const { fundName, fundThesis, styleJson, useStyleBank } = req.body;
+  const { fundName, fundThesis, styleJson, useStyleBank, manualStyle, manualInterpretation } = req.body;
 
   const name = typeof fundName === 'string' ? fundName.trim() : '';
   if (!name) return res.status(400).json({ error: 'fundName is required' });
@@ -598,6 +614,8 @@ app.post('/api/generate', (req, res) => {
 
   const styleBankEnabled = useStyleBank === true || useStyleBank === undefined;
   const job = createJob(name, thesis, styleJson || null, styleBankEnabled);
+  if (typeof manualStyle === 'string' && manualStyle.trim()) job.manualStyle = manualStyle.trim();
+  if (typeof manualInterpretation === 'string' && manualInterpretation.trim()) job.manualInterpretation = manualInterpretation.trim();
   runPipeline(job);
 
   res.json({ jobId: job.id, stage: job.stage });
@@ -617,6 +635,7 @@ app.get('/api/status/:jobId', (req, res) => {
     assignedInterpretations: job.assignedInterpretations,
     concepts: job.concepts,
     mjTaskIds: job.mjTaskIds,
+    rawImages: job.rawImages,
     rawImageCount: job.rawImages.length,
     approvedCount: job.approvedImages.length,
     rejectedCount: job.rejectedImages.length,
@@ -641,6 +660,13 @@ app.get('/api/results/:jobId', (req, res) => {
     rejectedImages: job.rejectedImages,
     rawImages: job.rawImages,
     error: job.error,
+  });
+});
+
+app.get('/api/banks', (_req, res) => {
+  res.json({
+    styles: loadStyleBank(),
+    interpretations: loadInterpretationBank(),
   });
 });
 

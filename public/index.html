@@ -212,7 +212,7 @@
       gap: 24px;
       align-items: flex-end;
     }
-    .input-bottom .style-wrap { flex: 1; }
+    .input-bottom .bank-selectors { flex: 1; }
     .input-bottom .btn-wrap { flex-shrink: 0; width: 220px; }
     .input-label {
       font-size: 10px;
@@ -255,26 +255,82 @@
     }
     .thesis-textarea::placeholder { color: rgba(255,255,255,0.2); }
     .thesis-textarea:focus { outline: none; border-color: rgba(255,255,255,0.5); }
-    .style-textarea {
+    .bank-selectors { display: flex; gap: 12px; width: 100%; }
+    .bank-select-wrap { flex: 1; position: relative; }
+    .bank-select-label {
+      font-family: var(--mono);
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      display: block;
+    }
+    .bank-search {
       width: 100%;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
+      border-radius: 8px;
       color: var(--text);
       font-family: var(--mono);
       font-size: 11px;
-      line-height: 1.6;
-      padding: 14px;
-      resize: vertical;
-      min-height: 100px;
-      transition: border-color 0.3s, box-shadow 0.3s;
+      padding: 10px 12px;
+      transition: border-color 0.3s;
+      box-sizing: border-box;
     }
-    .style-textarea::placeholder { color: rgba(255,255,255,0.15); }
-    .style-textarea:focus {
-      outline: none;
-      border-color: rgba(255,255,255,0.2);
-      box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
+    .bank-search::placeholder { color: rgba(255,255,255,0.2); }
+    .bank-search:focus { outline: none; border-color: rgba(255,255,255,0.3); }
+    .bank-dropdown {
+      position: absolute;
+      left: 0; right: 0;
+      top: 100%;
+      margin-top: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      background: rgba(10,10,14,0.95);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      backdrop-filter: blur(20px);
+      z-index: 50;
+      display: none;
     }
+    .bank-dropdown.open { display: block; }
+    .bank-option {
+      padding: 8px 12px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-mid);
+      cursor: pointer;
+      transition: background 0.15s;
+      line-height: 1.5;
+    }
+    .bank-option:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+    .bank-option.selected { background: rgba(255,255,255,0.06); color: var(--text); }
+    .bank-selected-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1.4;
+      max-width: 100%;
+      word-break: break-word;
+    }
+    .bank-selected-tag--style { background: rgba(16,185,129,0.12); color: #34d399; }
+    .bank-selected-tag--interp { background: rgba(168,85,247,0.12); color: #c084fc; }
+    .bank-clear {
+      cursor: pointer;
+      opacity: 0.5;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .bank-clear:hover { opacity: 1; }
+    .bank-dropdown::-webkit-scrollbar { width: 4px; }
+    .bank-dropdown::-webkit-scrollbar-track { background: transparent; }
+    .bank-dropdown::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
     /* Style bank toggle */
     .toggle-row {
@@ -606,9 +662,8 @@
     .gallery-scatter {
       position: relative;
       width: 100%;
-      height: 1100px;
-      overflow: hidden;
-      border-radius: 20px;
+      height: 2400px;
+      overflow: visible;
       margin-bottom: 40px;
     }
     .gallery-card {
@@ -621,8 +676,8 @@
       z-index: 10;
       box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,255,255,0.06);
     }
-    .gallery-card--pass { width: 220px; }
-    .gallery-card--fail { width: 140px; }
+    .gallery-card--pass { width: 385px; }
+    .gallery-card--fail { width: 245px; }
     .gallery-card-img {
       width: 100%;
       aspect-ratio: 1;
@@ -678,6 +733,7 @@
     .gallery-card-verdict--pass { color: var(--pass); }
     .gallery-card-verdict--fail { color: var(--fail); opacity: 0.6; }
     .gallery-card-verdict--skip { color: var(--text-dim); }
+    .gallery-card-verdict--pending { color: rgba(255,255,255,0.3); font-style: italic; }
     .gallery-dl-btn {
       display: inline-flex;
       align-items: center;
@@ -706,10 +762,10 @@
       filter: grayscale(0.3);
     }
     @keyframes galleryFadeIn {
-      from { opacity: 0; transform: translateY(30px) scale(0.92); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
-    .gallery-card { animation: galleryFadeIn 0.6s ease-out both; }
+    .gallery-card { animation: galleryFadeIn 0.5s ease-out forwards; }
 
     /* Lightbox */
     .lightbox-overlay {
@@ -728,18 +784,21 @@
     @keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
     .lightbox-content {
       position: relative;
-      max-width: 85vw;
+      max-width: min(600px, 85vw);
       max-height: 85vh;
       cursor: default;
       animation: lbZoomIn 0.3s ease-out;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     @keyframes lbZoomIn {
       from { opacity: 0; transform: scale(0.85); }
       to { opacity: 1; transform: scale(1); }
     }
     .lightbox-img {
-      max-width: 85vw;
-      max-height: 75vh;
+      max-width: 100%;
+      max-height: 70vh;
       object-fit: contain;
       border-radius: 12px;
       display: block;
@@ -748,8 +807,11 @@
     .lightbox-meta {
       padding: 16px 4px 0;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 16px;
+      gap: 8px;
+      width: 100%;
+      text-align: center;
     }
     .lightbox-concept {
       font-size: 16px;
@@ -760,10 +822,9 @@
       font-family: var(--mono);
       font-size: 10px;
       color: var(--text-dim);
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      line-height: 1.6;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     .lightbox-dl {
       display: inline-flex;
@@ -798,8 +859,8 @@
       .gallery-card {
         position: static !important;
         transform: none !important;
-        width: 80% !important;
-        max-width: 300px;
+        width: 90% !important;
+        max-width: 385px;
       }
       .gallery-card-img { border-radius: 10px; }
       .lightbox-img { max-width: 95vw; max-height: 70vh; }
@@ -974,6 +1035,7 @@
       .input-thesis { border-radius: 0; }
       .input-bottom { flex-direction: column; border-radius: 0 0 16px 16px; }
       .input-bottom .btn-wrap { width: 100%; }
+      .bank-selectors { flex-direction: column; }
       .image-grid { grid-template-columns: 1fr; }
       .history-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
       .header h1 { font-size: 36px; }
@@ -1019,9 +1081,19 @@
         <textarea id="fund-thesis" class="thesis-textarea" placeholder="Hedge the AI Bubble with diversified short positions across overvalued tech sectors"></textarea>
       </div>
       <div class="input-bottom glass glass-glow">
-        <div class="style-wrap">
-          <label for="style-json" class="input-label">Style JSON</label>
-          <textarea id="style-json" class="style-textarea" placeholder='{ "visual_style": { ... } }'></textarea>
+        <div class="bank-selectors">
+          <div class="bank-select-wrap">
+            <span class="bank-select-label">Style Override</span>
+            <input id="style-search" class="bank-search" type="text" placeholder="Search styles..." autocomplete="off" />
+            <div id="style-dropdown" class="bank-dropdown"></div>
+            <div id="style-selected"></div>
+          </div>
+          <div class="bank-select-wrap">
+            <span class="bank-select-label">Interpretation Override</span>
+            <input id="interp-search" class="bank-search" type="text" placeholder="Search interpretations..." autocomplete="off" />
+            <div id="interp-dropdown" class="bank-dropdown"></div>
+            <div id="interp-selected"></div>
+          </div>
         </div>
         <div class="btn-wrap">
           <div class="toggle-row">
@@ -1140,10 +1212,73 @@
     const bgLayer = document.getElementById('bg-layer');
     const fundNameInput = document.getElementById('fund-name');
     const fundThesisInput = document.getElementById('fund-thesis');
-    const styleJsonInput = document.getElementById('style-json');
     const styleBankToggle = document.getElementById('style-bank-toggle');
     const styleBankLabel = document.getElementById('style-bank-label');
     let styleBankEnabled = true;
+
+    let bankStyles = [];
+    let bankInterps = [];
+    let selectedStyle = null;
+    let selectedInterp = null;
+
+    const styleSearch = document.getElementById('style-search');
+    const styleDropdown = document.getElementById('style-dropdown');
+    const styleSelectedEl = document.getElementById('style-selected');
+    const interpSearch = document.getElementById('interp-search');
+    const interpDropdown = document.getElementById('interp-dropdown');
+    const interpSelectedEl = document.getElementById('interp-selected');
+
+    (async function loadBanks() {
+      try {
+        const res = await fetch('/api/banks');
+        if (!res.ok) return;
+        const data = await res.json();
+        bankStyles = data.styles || [];
+        bankInterps = data.interpretations || [];
+      } catch {}
+    })();
+
+    function renderBankDropdown(items, container, searchVal, onSelect) {
+      const q = searchVal.toLowerCase();
+      const filtered = q ? items.filter(s => s.toLowerCase().includes(q)) : items;
+      container.innerHTML = filtered.slice(0, 80).map(s =>
+        `<div class="bank-option">${esc(s)}</div>`
+      ).join('');
+      for (const opt of container.children) {
+        opt.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          onSelect(opt.textContent);
+        });
+      }
+      container.classList.toggle('open', filtered.length > 0);
+    }
+
+    function renderSelectedTag(value, el, tagClass, onClear) {
+      if (!value) { el.innerHTML = ''; return; }
+      el.innerHTML = `<span class="bank-selected-tag ${tagClass}">${esc(value)}<span class="bank-clear" title="Clear">&times;</span></span>`;
+      el.querySelector('.bank-clear').addEventListener('click', onClear);
+    }
+
+    styleSearch.addEventListener('focus', () => renderBankDropdown(bankStyles, styleDropdown, styleSearch.value, selectStyle));
+    styleSearch.addEventListener('input', () => renderBankDropdown(bankStyles, styleDropdown, styleSearch.value, selectStyle));
+    styleSearch.addEventListener('blur', () => setTimeout(() => styleDropdown.classList.remove('open'), 150));
+
+    interpSearch.addEventListener('focus', () => renderBankDropdown(bankInterps, interpDropdown, interpSearch.value, selectInterp));
+    interpSearch.addEventListener('input', () => renderBankDropdown(bankInterps, interpDropdown, interpSearch.value, selectInterp));
+    interpSearch.addEventListener('blur', () => setTimeout(() => interpDropdown.classList.remove('open'), 150));
+
+    function selectStyle(val) {
+      selectedStyle = val;
+      styleSearch.value = '';
+      styleDropdown.classList.remove('open');
+      renderSelectedTag(val, styleSelectedEl, 'bank-selected-tag--style', () => { selectedStyle = null; renderSelectedTag(null, styleSelectedEl); });
+    }
+    function selectInterp(val) {
+      selectedInterp = val;
+      interpSearch.value = '';
+      interpDropdown.classList.remove('open');
+      renderSelectedTag(val, interpSelectedEl, 'bank-selected-tag--interp', () => { selectedInterp = null; renderSelectedTag(null, interpSelectedEl); });
+    }
 
     function setStyleBankToggle(on) {
       styleBankEnabled = on;
@@ -1221,6 +1356,7 @@
     const stageLabels = {
       generating_theme: 'Generating themes',
       generating_images: 'Creating images',
+      images_ready: 'Running QC',
       qc_check: 'Running QC',
     };
 
@@ -1238,6 +1374,12 @@
       setStage(stageTheme, 'pending');
       setStage(stageMj, 'pending');
       setStage(stageQc, 'pending');
+      selectedStyle = null;
+      selectedInterp = null;
+      styleSearch.value = '';
+      interpSearch.value = '';
+      styleSelectedEl.innerHTML = '';
+      interpSelectedEl.innerHTML = '';
     }
 
     function updateStages(stage) {
@@ -1245,6 +1387,7 @@
         queued:            ['pending','pending','pending'],
         generating_theme:  ['active','pending','pending'],
         generating_images: ['done','active','pending'],
+        images_ready:      ['done','done','active'],
         qc_check:          ['done','done','active'],
         complete:          ['done','done','done'],
         error:             ['error','error','error'],
@@ -1299,18 +1442,18 @@
     }
 
     const GALLERY_SLOTS = [
-      { x: 2,  y: 1,  depth: 0.1 },
-      { x: 18, y: 6,  depth: 0.85 },
-      { x: 40, y: 0,  depth: 0.4 },
-      { x: 62, y: 8,  depth: 1.0 },
-      { x: 8,  y: 26, depth: 0.7 },
-      { x: 30, y: 32, depth: 0.2 },
-      { x: 48, y: 24, depth: 0.95 },
-      { x: 68, y: 30, depth: 0.15 },
-      { x: 5,  y: 52, depth: 0.9 },
-      { x: 22, y: 58, depth: 0.35 },
-      { x: 45, y: 50, depth: 0.6 },
-      { x: 65, y: 56, depth: 0.8 },
+      { x: 2,  y: 0,  depth: 0.1 },
+      { x: 35, y: 1,  depth: 0.75 },
+      { x: 65, y: 0,  depth: 0.4 },
+      { x: 5,  y: 18, depth: 0.9 },
+      { x: 38, y: 19, depth: 0.25 },
+      { x: 67, y: 18, depth: 0.65 },
+      { x: 3,  y: 37, depth: 0.5 },
+      { x: 36, y: 38, depth: 1.0 },
+      { x: 66, y: 37, depth: 0.15 },
+      { x: 4,  y: 56, depth: 0.8 },
+      { x: 37, y: 57, depth: 0.35 },
+      { x: 65, y: 56, depth: 0.95 },
     ];
 
     function renderGalleryCard(img, index) {
@@ -1318,9 +1461,9 @@
       const rotation = (index % 2 === 0 ? 1 : -1) * (1 + (index * 0.7) % 2.5);
       const card = document.createElement('div');
 
+      const hasVerdict = img.verdict && img.verdict !== 'skipped';
       const isRejected = img.verdict === 'FAIL' || img.verdict === 'ERROR';
-      const sizeClass = isRejected ? 'gallery-card--fail' : 'gallery-card--pass';
-      card.className = `gallery-card ${sizeClass}${isRejected ? ' gallery-card--rejected' : ''}`;
+      card.className = `gallery-card gallery-card--pass${isRejected ? ' gallery-card--rejected' : ''}`;
       card.dataset.depth = slot.depth;
       card.style.left = `${slot.x}%`;
       card.style.top = `${slot.y}%`;
@@ -1329,9 +1472,18 @@
       card.style.animationDelay = `${index * 0.12}s`;
       card.dataset.baseRotation = rotation.toFixed(1);
 
-      let verdictClass = 'gallery-card-verdict--skip';
-      if (img.verdict === 'PASS') verdictClass = 'gallery-card-verdict--pass';
-      else if (img.verdict === 'FAIL' || img.verdict === 'ERROR') verdictClass = 'gallery-card-verdict--fail';
+      let verdictLabel = '';
+      let verdictClass = '';
+      if (!hasVerdict) {
+        verdictLabel = 'checking...';
+        verdictClass = 'gallery-card-verdict--pending';
+      } else if (img.verdict === 'PASS') {
+        verdictLabel = 'PASS';
+        verdictClass = 'gallery-card-verdict--pass';
+      } else {
+        verdictLabel = img.verdict;
+        verdictClass = 'gallery-card-verdict--fail';
+      }
 
       const imgUrl = safeUrl(img.url);
       card.innerHTML = `
@@ -1341,7 +1493,7 @@
           ${img.style ? `<div class="gallery-card-detail">${esc(img.style)}</div>` : ''}
           ${img.interpretation ? `<div class="gallery-card-interp">${esc(img.interpretation)}</div>` : ''}
           <div class="gallery-card-actions">
-            <span class="gallery-card-verdict ${verdictClass}">${esc(img.verdict || 'skipped')}</span>
+            <span class="gallery-card-verdict ${verdictClass}">${esc(verdictLabel)}</span>
             <a class="gallery-dl-btn" href="${imgUrl}" download onclick="event.stopPropagation()">&#8595;</a>
           </div>
         </div>
@@ -1363,10 +1515,9 @@
       for (const card of _galleryContainer.children) {
         const depth = parseFloat(card.dataset.depth) || 0.5;
         const baseRot = parseFloat(card.dataset.baseRotation) || 0;
-        const tx = mx * (depth - 0.5) * 160;
-        const ty = my * (depth - 0.5) * 110;
-        const sc = 1 + depth * 0.05;
-        card.style.transform = `translate(${tx}px, ${ty}px) rotate(${baseRot}deg) scale(${sc.toFixed(3)})`;
+        const tx = mx * depth * 50;
+        const ty = my * depth * 35;
+        card.style.transform = `translate(${tx}px, ${ty}px) rotate(${baseRot}deg)`;
       }
     });
 
@@ -1399,12 +1550,6 @@
       const fundName = fundNameInput.value.trim();
       const fundThesis = fundThesisInput.value.trim();
       if (!fundName) { fundNameInput.focus(); return; }
-      let styleJson = null;
-      const rawJson = styleJsonInput.value.trim();
-      if (rawJson) {
-        try { styleJson = JSON.parse(rawJson); }
-        catch { alert('Invalid JSON in the style field.'); return; }
-      }
 
       resetUI();
       pipelineSection.classList.remove('hidden');
@@ -1416,7 +1561,7 @@
         const res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fundName, fundThesis, styleJson, useStyleBank: styleBankEnabled }),
+          body: JSON.stringify({ fundName, fundThesis, useStyleBank: styleBankEnabled, manualStyle: selectedStyle, manualInterpretation: selectedInterp }),
         });
         if (res.status === 401) { location.reload(); return; }
         const data = await res.json();
@@ -1473,6 +1618,16 @@
           return;
         }
 
+        if ((status.stage === 'images_ready' || status.stage === 'qc_check') && gallerySection.classList.contains('hidden')) {
+          if (status.rawImages?.length > 0) {
+            gallerySection.classList.remove('hidden');
+            status.rawImages.forEach((img, i) => {
+              galleryScatter.appendChild(renderGalleryCard({ ...img, verdict: null }, i));
+            });
+            initGalleryParallax(galleryScatter);
+          }
+        }
+
         if (status.stage === 'complete') {
           let results;
           try {
@@ -1491,6 +1646,7 @@
             ...(results.rejectedImages || []),
           ];
 
+          galleryScatter.innerHTML = '';
           if (allImages.length > 0) {
             gallerySection.classList.remove('hidden');
             allImages.forEach((img, i) => {
