@@ -256,7 +256,7 @@
     .thesis-textarea::placeholder { color: rgba(255,255,255,0.2); }
     .thesis-textarea:focus { outline: none; border-color: rgba(255,255,255,0.5); }
     .bank-selectors { display: flex; gap: 12px; width: 100%; }
-    .bank-select-wrap { flex: 1; position: relative; }
+    .bank-select-wrap { flex: 1; }
     .bank-select-label {
       font-family: var(--mono);
       font-size: 8px;
@@ -266,67 +266,35 @@
       margin-bottom: 6px;
       display: block;
     }
-    .bank-input-row {
-      display: flex;
-      gap: 0;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
-      background: rgba(255,255,255,0.04);
-      transition: border-color 0.3s;
-    }
-    .bank-input-row:focus-within { border-color: rgba(255,255,255,0.3); }
-    .bank-search {
-      flex: 1;
-      min-width: 0;
-      background: transparent;
-      border: none;
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 10px 12px;
-      box-sizing: border-box;
-    }
-    .bank-search::placeholder { color: rgba(255,255,255,0.2); }
-    .bank-search:focus { outline: none; }
-    .bank-chevron {
+    .bank-trigger {
+      width: 100%;
       display: flex;
       align-items: center;
-      justify-content: center;
-      width: 32px;
-      flex-shrink: 0;
-      cursor: pointer;
-      color: rgba(255,255,255,0.25);
-      font-size: 10px;
-      transition: color 0.2s;
-      user-select: none;
-    }
-    .bank-chevron:hover { color: rgba(255,255,255,0.6); }
-    .bank-dropdown {
-      position: absolute;
-      left: 0; right: 0;
-      top: 100%;
-      margin-top: 4px;
-      max-height: 220px;
-      overflow-y: auto;
-      background: rgba(10,10,14,0.95);
-      border: 1px solid rgba(255,255,255,0.1);
+      gap: 8px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
       border-radius: 8px;
-      backdrop-filter: blur(20px);
-      z-index: 50;
-      display: none;
-    }
-    .bank-dropdown.open { display: block; }
-    .bank-option {
-      padding: 8px 12px;
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text-mid);
+      padding: 10px 12px;
       cursor: pointer;
-      transition: background 0.15s;
-      line-height: 1.5;
+      transition: border-color 0.3s;
+      box-sizing: border-box;
     }
-    .bank-option:hover { background: rgba(255,255,255,0.08); color: var(--text); }
-    .bank-option.selected { background: rgba(255,255,255,0.06); color: var(--text); }
+    .bank-trigger:hover { border-color: rgba(255,255,255,0.2); }
+    .bank-trigger-text {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: rgba(255,255,255,0.2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .bank-trigger-text.has-value { color: var(--text); }
+    .bank-trigger-icon {
+      flex-shrink: 0;
+      font-size: 12px;
+      color: rgba(255,255,255,0.3);
+    }
     .bank-selected-tag {
       display: inline-flex;
       align-items: center;
@@ -349,9 +317,105 @@
       flex-shrink: 0;
     }
     .bank-clear:hover { opacity: 1; }
-    .bank-dropdown::-webkit-scrollbar { width: 4px; }
-    .bank-dropdown::-webkit-scrollbar-track { background: transparent; }
-    .bank-dropdown::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    .bank-modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 400;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: lbFadeIn 0.2s ease-out;
+    }
+    .bank-modal-overlay.hidden { display: none; }
+    .bank-modal {
+      width: 90vw;
+      max-width: 700px;
+      height: 75vh;
+      background: rgba(14,14,18,0.97);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: lbZoomIn 0.25s ease-out;
+    }
+    .bank-modal-header {
+      padding: 20px 24px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .bank-modal-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .bank-modal-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .bank-modal-close {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-dim);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .bank-modal-close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .bank-modal-search {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 10px 14px;
+      box-sizing: border-box;
+      margin-bottom: 4px;
+    }
+    .bank-modal-search::placeholder { color: rgba(255,255,255,0.2); }
+    .bank-modal-search:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+    .bank-modal-count {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      padding: 0 2px 8px;
+    }
+    .bank-modal-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 24px 20px;
+    }
+    .bank-modal-list::-webkit-scrollbar { width: 4px; }
+    .bank-modal-list::-webkit-scrollbar-track { background: transparent; }
+    .bank-modal-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    .bank-modal-item {
+      padding: 10px 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-mid);
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.15s;
+      line-height: 1.5;
+      margin-bottom: 2px;
+    }
+    .bank-modal-item:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
     /* Style bank toggle */
     .toggle-row {
@@ -1105,20 +1169,18 @@
         <div class="bank-selectors">
           <div class="bank-select-wrap">
             <span class="bank-select-label">Style Override</span>
-            <div class="bank-input-row">
-              <input id="style-search" class="bank-search" type="text" placeholder="Search or browse styles..." autocomplete="off" />
-              <span id="style-chevron" class="bank-chevron">&#9662;</span>
+            <div id="style-trigger" class="bank-trigger">
+              <span id="style-trigger-text" class="bank-trigger-text">Browse styles...</span>
+              <span class="bank-trigger-icon">&#128269;</span>
             </div>
-            <div id="style-dropdown" class="bank-dropdown"></div>
             <div id="style-selected"></div>
           </div>
           <div class="bank-select-wrap">
             <span class="bank-select-label">Interpretation Override</span>
-            <div class="bank-input-row">
-              <input id="interp-search" class="bank-search" type="text" placeholder="Search or browse interpretations..." autocomplete="off" />
-              <span id="interp-chevron" class="bank-chevron">&#9662;</span>
+            <div id="interp-trigger" class="bank-trigger">
+              <span id="interp-trigger-text" class="bank-trigger-text">Browse interpretations...</span>
+              <span class="bank-trigger-icon">&#128269;</span>
             </div>
-            <div id="interp-dropdown" class="bank-dropdown"></div>
             <div id="interp-selected"></div>
           </div>
         </div>
@@ -1164,6 +1226,21 @@
         <span id="lightbox-prompt" class="lightbox-prompt"></span>
         <a id="lightbox-dl" class="lightbox-dl" href="" download>&#8595; Download</a>
       </div>
+    </div>
+  </div>
+
+  <!-- Bank browser modal -->
+  <div id="bank-modal" class="bank-modal-overlay hidden">
+    <div class="bank-modal">
+      <div class="bank-modal-header">
+        <div class="bank-modal-title-row">
+          <span id="bank-modal-title" class="bank-modal-title">Styles</span>
+          <button id="bank-modal-close" class="bank-modal-close">&times;</button>
+        </div>
+        <input id="bank-modal-search" class="bank-modal-search" type="text" placeholder="Search..." autocomplete="off" />
+        <div id="bank-modal-count" class="bank-modal-count"></div>
+      </div>
+      <div id="bank-modal-list" class="bank-modal-list"></div>
     </div>
   </div>
 
@@ -1248,12 +1325,22 @@
     let selectedStyle = null;
     let selectedInterp = null;
 
-    const styleSearch = document.getElementById('style-search');
-    const styleDropdown = document.getElementById('style-dropdown');
+    const styleTrigger = document.getElementById('style-trigger');
+    const styleTriggerText = document.getElementById('style-trigger-text');
     const styleSelectedEl = document.getElementById('style-selected');
-    const interpSearch = document.getElementById('interp-search');
-    const interpDropdown = document.getElementById('interp-dropdown');
+    const interpTrigger = document.getElementById('interp-trigger');
+    const interpTriggerText = document.getElementById('interp-trigger-text');
     const interpSelectedEl = document.getElementById('interp-selected');
+
+    const bankModal = document.getElementById('bank-modal');
+    const bankModalTitle = document.getElementById('bank-modal-title');
+    const bankModalClose = document.getElementById('bank-modal-close');
+    const bankModalSearch = document.getElementById('bank-modal-search');
+    const bankModalCount = document.getElementById('bank-modal-count');
+    const bankModalList = document.getElementById('bank-modal-list');
+
+    let _bankModalItems = [];
+    let _bankModalCallback = null;
 
     (async function loadBanks() {
       try {
@@ -1265,20 +1352,42 @@
       } catch {}
     })();
 
-    function renderBankDropdown(items, container, searchVal, onSelect) {
-      const q = searchVal.toLowerCase();
-      const filtered = q ? items.filter(s => s.toLowerCase().includes(q)) : items;
-      container.innerHTML = filtered.slice(0, 80).map(s =>
-        `<div class="bank-option">${esc(s)}</div>`
+    function openBankModal(title, items, onSelect) {
+      _bankModalItems = items;
+      _bankModalCallback = onSelect;
+      bankModalTitle.textContent = title;
+      bankModalSearch.value = '';
+      renderBankModalList('');
+      bankModal.classList.remove('hidden');
+      setTimeout(() => bankModalSearch.focus(), 100);
+    }
+
+    function closeBankModal() {
+      bankModal.classList.add('hidden');
+      _bankModalCallback = null;
+    }
+
+    function renderBankModalList(query) {
+      const q = query.toLowerCase();
+      const filtered = q ? _bankModalItems.filter(s => s.toLowerCase().includes(q)) : _bankModalItems;
+      bankModalCount.textContent = `${filtered.length} of ${_bankModalItems.length}`;
+      bankModalList.innerHTML = filtered.map(s =>
+        `<div class="bank-modal-item">${esc(s)}</div>`
       ).join('');
-      for (const opt of container.children) {
-        opt.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          onSelect(opt.textContent);
+      for (const item of bankModalList.children) {
+        item.addEventListener('click', () => {
+          if (_bankModalCallback) _bankModalCallback(item.textContent);
+          closeBankModal();
         });
       }
-      container.classList.toggle('open', filtered.length > 0);
     }
+
+    bankModalSearch.addEventListener('input', () => renderBankModalList(bankModalSearch.value));
+    bankModalClose.addEventListener('click', closeBankModal);
+    bankModal.addEventListener('click', (e) => { if (e.target === bankModal) closeBankModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !bankModal.classList.contains('hidden')) closeBankModal();
+    });
 
     function renderSelectedTag(value, el, tagClass, onClear) {
       if (!value) { el.innerHTML = ''; return; }
@@ -1286,47 +1395,33 @@
       el.querySelector('.bank-clear').addEventListener('click', onClear);
     }
 
-    const styleChevron = document.getElementById('style-chevron');
-    const interpChevron = document.getElementById('interp-chevron');
-
-    function toggleDropdown(items, container, searchInput, onSelect) {
-      if (container.classList.contains('open')) {
-        container.classList.remove('open');
-      } else {
-        renderBankDropdown(items, container, searchInput.value, onSelect);
-      }
-    }
-
-    styleSearch.addEventListener('focus', () => renderBankDropdown(bankStyles, styleDropdown, styleSearch.value, selectStyle));
-    styleSearch.addEventListener('input', () => renderBankDropdown(bankStyles, styleDropdown, styleSearch.value, selectStyle));
-    styleSearch.addEventListener('blur', () => setTimeout(() => styleDropdown.classList.remove('open'), 150));
-    styleChevron.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      toggleDropdown(bankStyles, styleDropdown, styleSearch, selectStyle);
-      styleSearch.focus();
+    styleTrigger.addEventListener('click', () => {
+      openBankModal('Styles', bankStyles, (val) => {
+        selectedStyle = val;
+        styleTriggerText.textContent = val;
+        styleTriggerText.classList.add('has-value');
+        renderSelectedTag(val, styleSelectedEl, 'bank-selected-tag--style', () => {
+          selectedStyle = null;
+          styleTriggerText.textContent = 'Browse styles...';
+          styleTriggerText.classList.remove('has-value');
+          styleSelectedEl.innerHTML = '';
+        });
+      });
     });
 
-    interpSearch.addEventListener('focus', () => renderBankDropdown(bankInterps, interpDropdown, interpSearch.value, selectInterp));
-    interpSearch.addEventListener('input', () => renderBankDropdown(bankInterps, interpDropdown, interpSearch.value, selectInterp));
-    interpSearch.addEventListener('blur', () => setTimeout(() => interpDropdown.classList.remove('open'), 150));
-    interpChevron.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      toggleDropdown(bankInterps, interpDropdown, interpSearch, selectInterp);
-      interpSearch.focus();
+    interpTrigger.addEventListener('click', () => {
+      openBankModal('Interpretations', bankInterps, (val) => {
+        selectedInterp = val;
+        interpTriggerText.textContent = val;
+        interpTriggerText.classList.add('has-value');
+        renderSelectedTag(val, interpSelectedEl, 'bank-selected-tag--interp', () => {
+          selectedInterp = null;
+          interpTriggerText.textContent = 'Browse interpretations...';
+          interpTriggerText.classList.remove('has-value');
+          interpSelectedEl.innerHTML = '';
+        });
+      });
     });
-
-    function selectStyle(val) {
-      selectedStyle = val;
-      styleSearch.value = '';
-      styleDropdown.classList.remove('open');
-      renderSelectedTag(val, styleSelectedEl, 'bank-selected-tag--style', () => { selectedStyle = null; renderSelectedTag(null, styleSelectedEl); });
-    }
-    function selectInterp(val) {
-      selectedInterp = val;
-      interpSearch.value = '';
-      interpDropdown.classList.remove('open');
-      renderSelectedTag(val, interpSelectedEl, 'bank-selected-tag--interp', () => { selectedInterp = null; renderSelectedTag(null, interpSelectedEl); });
-    }
 
     function setStyleBankToggle(on) {
       styleBankEnabled = on;
@@ -1424,10 +1519,13 @@
       setStage(stageQc, 'pending');
       selectedStyle = null;
       selectedInterp = null;
-      styleSearch.value = '';
-      interpSearch.value = '';
+      styleTriggerText.textContent = 'Browse styles...';
+      styleTriggerText.classList.remove('has-value');
+      interpTriggerText.textContent = 'Browse interpretations...';
+      interpTriggerText.classList.remove('has-value');
       styleSelectedEl.innerHTML = '';
       interpSelectedEl.innerHTML = '';
+      closeBankModal();
     }
 
     function updateStages(stage) {
