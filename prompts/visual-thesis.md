@@ -139,6 +139,22 @@ Flat, declarative. 2-3 adjectives.
 
 ---
 
+STEP 6 — COMPRESS FOR MIDJOURNEY
+
+Steps 1-5 are your internal creative process. Do NOT output the full brief.
+
+Compress your result into a single flowing Midjourney prompt of 15-30 words. Include: the style/medium, the core subject, one key action or state, and one atmospheric detail. Cut everything else. Midjourney responds best to concise, evocative fragments — not narrative descriptions.
+
+WRONG (too long): "Scratchboard illustration, white lines incised into black-inked board. A family of four silhouettes stands before their small house, moving boxes stacked beside them, while a larger figure in a suit approaches with papers in hand. Fine white crosshatching reveals the worn textures."
+
+RIGHT (concise): "Scratchboard illustration, foreclosed house with eviction notice on door, family silhouettes walking away, white lines on black"
+
+WRONG (off-thesis): "Fujifilm macro close-up of a surgeon's gloved hand gripping a bone lever during spinal surgery, vertebrae in soft focus"
+
+RIGHT (on-thesis): "Fujifilm macro close-up, house key snapping under leverage pressure, fractured metal catching warm light, shallow depth of field"
+
+---
+
 RULES:
 - START WITH THE OBVIOUS. The most literal interpretation of the fund name is the starting point. Always.
 - THE IMAGE DOES THE FEELING, THE NAME DOES THE LABELING. The fund name appears below the image. Do not redundantly illustrate adjectives or modifiers from the fund name inside the image. The image provides the core visual metaphor and the emotional atmosphere. The name provides the context.

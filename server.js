@@ -239,14 +239,17 @@ async function generateThemes(job) {
 
     directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style AND a mandatory interpretation angle.
 
-Style defines the artistic treatment — the medium, technique, or rendering approach for the image.
-Interpretation defines the conceptual approach — what to depict, what angle to take, how to think about the fund.
+Style defines the artistic treatment — the medium, technique, or rendering approach.
+Interpretation defines the creative angle — how to THINK about the fund thesis when choosing what to depict.
 
-You MUST use BOTH for each concept. The interpretation angle overrides your default instinct about what to depict — follow it even if it leads somewhere unexpected:
+You MUST use BOTH for each concept:
 
 ${directives}
 
-The style must be baked into the prompt itself, not appended as a tag. The interpretation must shape WHAT you depict, not just how you describe it. If the style mentions specific objects (e.g. "platinum bands," "chrome strands"), treat those as material and textural references to inform the rendering — not as literal subjects to depict. The fund thesis is always the source of the subject matter.`;
+CRITICAL RULES:
+- The style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
+- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation leads to a scene unrelated to the fund, you've gone too far. Pull it back. Example: for a mortgage fund, "interpret through a specific profession" should show a MORTGAGE-related profession (appraiser, auctioneer), not an unrelated one (surgeon, chef).
+- The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
 
     extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
   } else {
@@ -264,11 +267,11 @@ The style must be baked into the prompt itself, not appended as a tag. The inter
 
 Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.${directivesParagraph}
 
-PROMPT LENGTH: Vary prompt length naturally. Simple bold concepts can be 10-15 words. Complex layered scenes can be 30-50 words. Let the concept dictate the length — write exactly as many words as needed, no more, no less. Every word must earn its place. The style and interpretation must both be clearly reflected in the prompt.
+PROMPT LENGTH: 15-30 words. This is a Midjourney prompt, not an art direction brief. One style fragment, one subject, one action or state, one atmospheric detail. No narrative sentences. No multi-sentence descriptions. Every word must earn its place.
 
 Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
 - "concept": a 2-3 word label for the concept
-- "prompt": the image generation prompt (10-50 words, vary naturally)${extraReturnFields}
+- "prompt": the Midjourney image prompt (15-30 words, concise)${extraReturnFields}
 
 Return ONLY the JSON array, no other text.`,
       },
