@@ -1696,7 +1696,7 @@
             const res = await fetch('/api/upscale', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jobId: _currentJobId, imageIndex: index }),
+              body: JSON.stringify({ jobId: _currentJobId, imageIndex: img.rawIndex != null ? img.rawIndex : index }),
             });
             if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Upscale failed'); }
             const data = await res.json();

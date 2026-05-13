@@ -498,6 +498,7 @@ async function generateAllImages(job) {
       const quadrantFiles = await cropGridToQuadrants(imageUrl, job.id, i);
       for (let q = 0; q < quadrantFiles.length; q++) {
         allImages.push({
+          rawIndex: allImages.length,
           url: `/api/quadrant/${job.id}/${quadrantFiles[q]}`,
           gridUrl: imageUrl,
           gridJobId,
@@ -724,7 +725,7 @@ app.post('/api/upscale', async (req, res) => {
   }
 
   try {
-    console.log(`[job ${jobId}] Upscaling image ${idx} (grid ${img.gridJobId}, quadrant ${img.imageNo})...`);
+    console.log(`[job ${jobId}] Upscaling rawIndex=${idx} (grid=${img.gridJobId}, quadrant=${img.imageNo}, concept="${img.concept}")`);
     const upscaleJobId = await submitUpscale(img.gridJobId, img.imageNo);
     const upscaledUrl = await pollUpscaleJob(upscaleJobId);
 
