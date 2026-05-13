@@ -839,6 +839,41 @@
       transition: all 0.2s;
     }
     .gallery-dl-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); }
+    .gallery-upscale-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-family: var(--mono);
+      font-size: 7px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .gallery-upscale-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); }
+    .gallery-upscale-btn.loading {
+      pointer-events: none;
+      opacity: 0.5;
+    }
+    .gallery-upscale-btn.done {
+      display: none;
+    }
+    .upscale-spinner {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border: 1.5px solid rgba(255,255,255,0.2);
+      border-top-color: var(--text);
+      border-radius: 50%;
+      animation: upscaleSpin 0.6s linear infinite;
+    }
+    @keyframes upscaleSpin { to { transform: rotate(360deg); } }
     .gallery-card--rejected {
       opacity: 0.45;
       filter: grayscale(0.6);
@@ -1506,6 +1541,7 @@
 
     function resetUI() {
       cardCounter = 0;
+      _currentJobId = null;
       pipelineSection.classList.add('hidden');
       pipelineSection.classList.remove('processing');
       gallerySection.classList.add('hidden');
@@ -1603,6 +1639,8 @@
       { x: 68, y: 1200, depth: 0.60 },
     ];
 
+    let _currentJobId = null;
+
     function renderGalleryCard(img, index) {
       const slot = GALLERY_SLOTS[index % GALLERY_SLOTS.length];
       const rotation = (index % 2 === 0 ? 1 : -1) * (1 + (index * 0.7) % 2.5);
@@ -1632,6 +1670,7 @@
         verdictClass = 'gallery-card-verdict--fail';
       }
 
+      const isUpscaled = img.upscaled === true;
       const imgUrl = safeUrl(img.url);
       card.innerHTML = `
         <img class="gallery-card-img" src="${imgUrl}" alt="" loading="lazy" />
@@ -1641,10 +1680,41 @@
           ${img.interpretation ? `<div class="gallery-card-interp">${esc(img.interpretation)}</div>` : ''}
           <div class="gallery-card-actions">
             <span class="gallery-card-verdict ${verdictClass}">${esc(verdictLabel)}</span>
+            ${!isUpscaled ? `<button class="gallery-upscale-btn" data-index="${index}" onclick="event.stopPropagation()">&#8593; HD</button>` : ''}
             <a class="gallery-dl-btn" href="${imgUrl}" download onclick="event.stopPropagation()">&#8595;</a>
           </div>
         </div>
       `;
+
+      const upscaleBtn = card.querySelector('.gallery-upscale-btn');
+      if (upscaleBtn) {
+        upscaleBtn.addEventListener('click', async () => {
+          if (upscaleBtn.classList.contains('loading')) return;
+          upscaleBtn.classList.add('loading');
+          upscaleBtn.innerHTML = '<span class="upscale-spinner"></span>';
+          try {
+            const res = await fetch('/api/upscale', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jobId: _currentJobId, imageIndex: index }),
+            });
+            if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Upscale failed'); }
+            const data = await res.json();
+            const newUrl = safeUrl(data.url);
+            const cardImg = card.querySelector('.gallery-card-img');
+            if (cardImg) cardImg.src = newUrl;
+            const dlBtn = card.querySelector('.gallery-dl-btn');
+            if (dlBtn) dlBtn.href = newUrl;
+            img.url = data.url;
+            img.upscaled = true;
+            upscaleBtn.classList.add('done');
+          } catch (err) {
+            upscaleBtn.classList.remove('loading');
+            upscaleBtn.innerHTML = '&#8593; HD';
+            console.error('Upscale error:', err.message);
+          }
+        });
+      }
 
       card.addEventListener('click', () => openLightbox(img));
       return card;
@@ -1749,6 +1819,7 @@
     const MAX_POLL_ITERATIONS = 300;
 
     async function pollJob(jobId) {
+      _currentJobId = jobId;
       for (let iter = 0; iter < MAX_POLL_ITERATIONS; iter++) {
         await new Promise((r) => setTimeout(r, 2000));
 

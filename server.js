@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, statSync, unlinkSync, renameSync, rmSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { pipeline as streamPipeline } from 'stream/promises';
@@ -8,6 +8,7 @@ import { createWriteStream } from 'fs';
 import os from 'os';
 import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
+import sharp from 'sharp';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -191,7 +192,13 @@ function createJob(fundName, fundThesis, styleJson, useStyleBank = true) {
 function pruneExpiredJobs() {
   const cutoff = Date.now() - JOB_TTL_MS;
   for (const [id, job] of jobs) {
-    if (job.createdAt < cutoff) jobs.delete(id);
+    if (job.createdAt < cutoff) {
+      jobs.delete(id);
+      const jobQuadDir = join(QUADRANT_DIR, id);
+      if (existsSync(jobQuadDir)) {
+        try { rmSync(jobQuadDir, { recursive: true, force: true }); } catch {}
+      }
+    }
   }
 }
 
@@ -374,7 +381,8 @@ async function pollGridJob(jobId) {
     const result = await fetchMidjourneyResult(jobId);
 
     if (result.status === 'completed') {
-      return jobId;
+      const imageUrl = result.output?.image_url || (result.output?.image_urls?.[0]) || null;
+      return { jobId, imageUrl };
     }
 
     if (result.status === 'failed') {
@@ -404,23 +412,39 @@ async function pollUpscaleJob(jobId) {
   throw new Error('Upscale task timed out after polling');
 }
 
-async function upscaleAllFour(gridJobId) {
-  const upscaleResults = await Promise.allSettled(
-    [0, 1, 2, 3].map(async (imageNo) => {
-      const upscaleJobId = await submitUpscale(gridJobId, imageNo);
-      return pollUpscaleJob(upscaleJobId);
-    })
-  );
+async function cropGridToQuadrants(gridUrl, jobId, gridIndex) {
+  const res = await fetch(gridUrl);
+  if (!res.ok) throw new Error(`Failed to download grid: HTTP ${res.status}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
 
-  const urls = [];
-  for (let i = 0; i < upscaleResults.length; i++) {
-    if (upscaleResults[i].status === 'fulfilled') {
-      urls.push(upscaleResults[i].value);
-    } else {
-      console.error(`[upscale ${gridJobId}] Image ${i} failed:`, upscaleResults[i].reason?.message);
-    }
+  const meta = await sharp(buffer).metadata();
+  const w = meta.width;
+  const h = meta.height;
+  const halfW = Math.floor(w / 2);
+  const halfH = Math.floor(h / 2);
+
+  const quadrants = [
+    { left: 0, top: 0 },
+    { left: halfW, top: 0 },
+    { left: 0, top: halfH },
+    { left: halfW, top: halfH },
+  ];
+
+  const jobDir = join(QUADRANT_DIR, jobId);
+  if (!existsSync(jobDir)) mkdirSync(jobDir, { recursive: true });
+
+  const files = [];
+  for (let q = 0; q < 4; q++) {
+    const filename = `grid${gridIndex}-q${q}.jpg`;
+    const filepath = join(jobDir, filename);
+    await sharp(buffer)
+      .extract({ left: quadrants[q].left, top: quadrants[q].top, width: halfW, height: halfH })
+      .jpeg({ quality: 92 })
+      .toFile(filepath);
+    files.push(filename);
   }
-  return urls;
+
+  return files;
 }
 
 async function generateAllImages(job) {
@@ -451,10 +475,9 @@ async function generateAllImages(job) {
     tasks.map((t) => pollGridJob(t.taskId))
   );
 
-  console.log(`[job ${job.id}] Grids complete, upscaling all quadrants...`);
+  console.log(`[job ${job.id}] Grids complete, cropping quadrants...`);
 
   const allImages = [];
-  const upscalePromises = [];
 
   for (let i = 0; i < gridResults.length; i++) {
     if (gridResults[i].status === 'rejected') {
@@ -462,33 +485,42 @@ async function generateAllImages(job) {
       continue;
     }
 
-    const gridJobId = gridResults[i].value;
+    const { jobId: gridJobId, imageUrl } = gridResults[i].value;
     const concept = tasks[i].concept;
 
-    upscalePromises.push(
-      upscaleAllFour(gridJobId).then((urls) => {
-        for (const url of urls) {
-          allImages.push({
-            url,
-            concept: concept.concept,
-            prompt: concept.prompt,
-            style: concept.style || null,
-            interpretation: concept.interpretation || null,
-          });
-        }
-      })
-    );
+    if (!imageUrl) {
+      console.error(`[job ${job.id}] No image URL for grid "${concept.concept}"`);
+      continue;
+    }
+
+    try {
+      const quadrantFiles = await cropGridToQuadrants(imageUrl, job.id, i);
+      for (let q = 0; q < quadrantFiles.length; q++) {
+        allImages.push({
+          url: `/api/quadrant/${job.id}/${quadrantFiles[q]}`,
+          gridUrl: imageUrl,
+          gridJobId,
+          imageNo: q,
+          quadrantFile: quadrantFiles[q],
+          upscaled: false,
+          concept: concept.concept,
+          prompt: concept.prompt,
+          style: concept.style || null,
+          interpretation: concept.interpretation || null,
+        });
+      }
+    } catch (err) {
+      console.error(`[job ${job.id}] Failed to crop grid for "${concept.concept}":`, err.message);
+    }
   }
 
-  await Promise.allSettled(upscalePromises);
-
-  job.rawImages = allImages.filter((img) => img.url);
+  job.rawImages = allImages;
 
   if (job.rawImages.length === 0) {
     throw new Error('All Midjourney image generations failed');
   }
 
-  console.log(`[job ${job.id}] Got ${job.rawImages.length} upscaled images back`);
+  console.log(`[job ${job.id}] Cropped ${job.rawImages.length} individual images`);
   return job.rawImages;
 }
 
@@ -519,13 +551,21 @@ async function runClogCheck(job) {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const imgRes = await fetch(img.url);
-        if (!imgRes.ok) throw new Error(`Failed to download image for QC: HTTP ${imgRes.status}`);
-        const buf = Buffer.from(await imgRes.arrayBuffer());
-        const base64 = buf.toString('base64');
+        let buf;
+        let mediaType = 'image/jpeg';
 
-        const contentType = imgRes.headers.get('content-type') || 'image/png';
-        const mediaType = contentType.split(';')[0].trim();
+        if (img.quadrantFile) {
+          const qPath = join(QUADRANT_DIR, job.id, img.quadrantFile);
+          buf = readFileSync(qPath);
+        } else {
+          const imgRes = await fetch(img.url);
+          if (!imgRes.ok) throw new Error(`Failed to download image for QC: HTTP ${imgRes.status}`);
+          buf = Buffer.from(await imgRes.arrayBuffer());
+          const contentType = imgRes.headers.get('content-type') || 'image/png';
+          mediaType = contentType.split(';')[0].trim();
+        }
+
+        const base64 = buf.toString('base64');
 
         const resp = await getAnthropic().messages.create({
           model: QC_MODEL,
@@ -663,6 +703,46 @@ app.get('/api/results/:jobId', (req, res) => {
   });
 });
 
+app.post('/api/upscale', async (req, res) => {
+  const { jobId, imageIndex } = req.body;
+  const job = jobs.get(jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  const idx = parseInt(imageIndex, 10);
+  if (isNaN(idx) || idx < 0 || idx >= job.rawImages.length) {
+    return res.status(400).json({ error: 'Invalid imageIndex' });
+  }
+
+  const img = job.rawImages[idx];
+  if (img.upscaled) {
+    return res.json({ url: img.url, alreadyUpscaled: true });
+  }
+
+  if (!img.gridJobId || img.imageNo === undefined) {
+    return res.status(400).json({ error: 'Image has no grid data for upscaling' });
+  }
+
+  try {
+    console.log(`[job ${jobId}] Upscaling image ${idx} (grid ${img.gridJobId}, quadrant ${img.imageNo})...`);
+    const upscaleJobId = await submitUpscale(img.gridJobId, img.imageNo);
+    const upscaledUrl = await pollUpscaleJob(upscaleJobId);
+
+    img.url = upscaledUrl;
+    img.upscaled = true;
+
+    const approved = job.approvedImages.find((a) => a.gridJobId === img.gridJobId && a.imageNo === img.imageNo);
+    if (approved) { approved.url = upscaledUrl; approved.upscaled = true; }
+    const rejected = job.rejectedImages.find((r) => r.gridJobId === img.gridJobId && r.imageNo === img.imageNo);
+    if (rejected) { rejected.url = upscaledUrl; rejected.upscaled = true; }
+
+    console.log(`[job ${jobId}] Upscaled image ${idx} successfully`);
+    res.json({ url: upscaledUrl });
+  } catch (err) {
+    console.error(`[job ${jobId}] Upscale failed for image ${idx}:`, err.message);
+    res.status(500).json({ error: err.message || 'Upscale failed' });
+  }
+});
+
 app.get('/api/banks', (_req, res) => {
   res.json({
     styles: loadStyleBank(),
@@ -670,14 +750,28 @@ app.get('/api/banks', (_req, res) => {
   });
 });
 
+app.get('/api/quadrant/:jobId/:filename', (req, res) => {
+  const { jobId, filename } = req.params;
+  const safeJobId = basename(jobId);
+  const safeFile = basename(filename);
+  if (safeJobId !== jobId || safeFile !== filename || !filename) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+  const filepath = join(QUADRANT_DIR, safeJobId, safeFile);
+  if (!existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
+  res.type('image/jpeg').sendFile(filepath);
+});
+
 // ---------------------------------------------------------------------------
 // Image archive — download and persist every generated image
 // ---------------------------------------------------------------------------
 const ARCHIVE_DIR = join(__dirname, 'archive');
+const QUADRANT_DIR = join(__dirname, 'quadrants');
 const HISTORY_FILE = join(ARCHIVE_DIR, 'history.json');
 const DOWNLOADS_DIR = join(os.homedir(), 'Downloads');
 
 if (!existsSync(ARCHIVE_DIR)) mkdirSync(ARCHIVE_DIR, { recursive: true });
+if (!existsSync(QUADRANT_DIR)) mkdirSync(QUADRANT_DIR, { recursive: true });
 
 let historyCache = null;
 
@@ -696,30 +790,91 @@ function saveHistory(entries) {
   writeFileSync(HISTORY_FILE, JSON.stringify(entries, null, 2));
 }
 
+const MAX_FILE_BYTES = 4.99 * 1024 * 1024;
+
+async function compressIfNeeded(filepath) {
+  const size = statSync(filepath).size;
+  if (size <= MAX_FILE_BYTES) return filepath;
+
+  console.log(`[archive] File ${basename(filepath)} is ${(size / 1024 / 1024).toFixed(2)} MB, compressing...`);
+  const outPath = filepath.replace(/\.\w+$/, '.jpg');
+  const tmpPath = outPath + '.tmp';
+  const srcBuffer = readFileSync(filepath);
+  const meta = await sharp(srcBuffer).metadata();
+  const srcWidth = meta.width || 2048;
+
+  let quality = 90;
+  let scale = 1.0;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    let pipeline = sharp(srcBuffer);
+    if (scale < 1.0) {
+      pipeline = pipeline.resize(Math.round(srcWidth * scale), null, { fit: 'inside' });
+    }
+    await pipeline.jpeg({ quality, mozjpeg: true }).toFile(tmpPath);
+
+    const newSize = statSync(tmpPath).size;
+    if (newSize <= MAX_FILE_BYTES) {
+      if (outPath !== filepath && existsSync(filepath)) unlinkSync(filepath);
+      renameSync(tmpPath, outPath);
+      console.log(`[archive] Compressed to ${(newSize / 1024 / 1024).toFixed(2)} MB (q${quality}, ${Math.round(scale * 100)}%)`);
+      return outPath;
+    }
+
+    if (quality > 70) {
+      quality -= 5;
+    } else {
+      scale -= 0.1;
+    }
+  }
+
+  if (existsSync(tmpPath)) {
+    if (outPath !== filepath && existsSync(filepath)) unlinkSync(filepath);
+    renameSync(tmpPath, outPath);
+  }
+  console.warn(`[archive] Could not compress below ${MAX_FILE_BYTES} bytes after 6 attempts`);
+  return outPath;
+}
+
 async function archiveImage(img, fundName, jobId) {
   const ts = Date.now();
   const uniqueId = crypto.randomUUID().slice(0, 8);
   const slug = (img.concept || 'image').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60);
-  const filename = `${ts}-${uniqueId}-${slug}.png`;
-  const filepath = join(ARCHIVE_DIR, filename);
+  const ext = img.quadrantFile && !img.upscaled ? '.jpg' : '.png';
+  let filename = `${ts}-${uniqueId}-${slug}${ext}`;
+  let filepath = join(ARCHIVE_DIR, filename);
 
   try {
-    const res = await fetch(img.url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    if (!res.body) throw new Error('Empty response body');
-    await streamPipeline(res.body, createWriteStream(filepath));
+    if (img.quadrantFile && !img.upscaled) {
+      const qPath = join(QUADRANT_DIR, jobId, img.quadrantFile);
+      copyFileSync(qPath, filepath);
+    } else {
+      const srcUrl = img.upscaled ? img.url : (img.gridUrl || img.url);
+      const res = await fetch(srcUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.body) throw new Error('Empty response body');
+      await streamPipeline(res.body, createWriteStream(filepath));
+    }
   } catch (err) {
-    console.error(`[archive] Failed to download ${img.url}:`, err.message);
+    console.error(`[archive] Failed to save ${img.url}:`, err.message);
     return null;
   }
 
   try {
+    filepath = await compressIfNeeded(filepath);
+    filename = basename(filepath);
+  } catch (err) {
+    console.error(`[archive] Compression error:`, err.message);
+  }
+
+  const dlExt = filename.endsWith('.jpg') ? '.jpg' : '.png';
+  try {
     const dlBase = `${fundName.replace(/[^a-z0-9]+/gi, '-')}-${slug}`;
-    let dlFilename = `${dlBase}.png`;
+    let dlFilename = `${dlBase}${dlExt}`;
     let version = 1;
     while (existsSync(join(DOWNLOADS_DIR, dlFilename)) && version < 1000) {
       version++;
-      dlFilename = `${dlBase}-${version}.png`;
+      dlFilename = `${dlBase}-${version}${dlExt}`;
     }
     copyFileSync(filepath, join(DOWNLOADS_DIR, dlFilename));
     console.log(`[archive] Saved to Downloads: ${dlFilename}`);
