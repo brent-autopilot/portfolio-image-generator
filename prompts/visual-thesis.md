@@ -77,6 +77,8 @@ Ask: what emotional register does this fund operate in?
 
 Choose ONE register and commit. State the rendering approach explicitly in the prompt.
 
+NOTE: An external style directive may be provided (e.g. "cyanotype print, deep Prussian blue with white silhouettes"). When present, it replaces your style selection above — use it as the rendering treatment. But it controls only the visual medium, technique, texture, and color treatment. It never overrides the fund thesis as the source of the subject matter. If the style directive mentions specific objects, treat those as material or textural qualities to apply to the thesis-driven subject.
+
 ---
 
 STEP 4 — SET THE ATMOSPHERE FROM THE JSON

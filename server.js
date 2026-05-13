@@ -103,12 +103,17 @@ const visualThesisPrompt = readFileSync(
   'utf-8'
 );
 
-function loadStyleBank() {
-  const raw = readFileSync(join(__dirname, 'prompts', 'style-bank.md'), 'utf-8');
-  return raw
+function loadBank(filepath) {
+  const raw = readFileSync(filepath, 'utf-8');
+  const afterSeparator = raw.split('\n---\n').pop() || raw;
+  return afterSeparator
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l && /^[a-zA-Z]/.test(l));
+    .filter((l) => l && /^[a-zA-Z0-9]/.test(l));
+}
+
+function loadStyleBank() {
+  return loadBank(join(__dirname, 'prompts', 'style-bank.md'));
 }
 
 const STYLE_BANK = loadStyleBank();
@@ -124,11 +129,7 @@ function pickRandomStyles(count) {
 }
 
 function loadInterpretationBank() {
-  const raw = readFileSync(join(__dirname, 'prompts', 'interpretation-bank.md'), 'utf-8');
-  return raw
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l && /^[a-zA-Z]/.test(l));
+  return loadBank(join(__dirname, 'prompts', 'interpretation-bank.md'));
 }
 
 const INTERPRETATION_BANK = loadInterpretationBank();
@@ -245,7 +246,7 @@ You MUST use BOTH for each concept. The interpretation angle overrides your defa
 
 ${directives}
 
-The style must be baked into the prompt itself, not appended as a tag. The interpretation must shape WHAT you depict, not just how you describe it.`;
+The style must be baked into the prompt itself, not appended as a tag. The interpretation must shape WHAT you depict, not just how you describe it. If the style mentions specific objects (e.g. "platinum bands," "chrome strands"), treat those as material and textural references to inform the rendering — not as literal subjects to depict. The fund thesis is always the source of the subject matter.`;
 
     extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
   } else {
