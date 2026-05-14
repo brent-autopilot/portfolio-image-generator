@@ -335,6 +335,7 @@ Return ONLY the JSON array, no other text.`,
 // ---------------------------------------------------------------------------
 const MJ_PROFILE_CARTER = '--profile ptxxc2l';
 const MJ_PROFILE_BRENT = '--profile zc5okgy';
+const MJ_PROFILE_BRENT_V2 = '--profile 263fx7r';
 
 async function submitMidjourneyJob(prompt, { profile = null } = {}) {
   const apiKey = process.env.LEGNEXT_API_KEY;
@@ -479,7 +480,10 @@ async function generateAllImages(job) {
   job.stage = 'generating_images';
 
   const submissionResults = await Promise.allSettled(
-    job.concepts.map((c, i) => submitMidjourneyJob(c.prompt, { profile: i < 2 ? MJ_PROFILE_CARTER : MJ_PROFILE_BRENT }))
+    job.concepts.map((c, i) => {
+      const profiles = [MJ_PROFILE_CARTER, MJ_PROFILE_BRENT, MJ_PROFILE_BRENT_V2];
+      return submitMidjourneyJob(c.prompt, { profile: profiles[i] || profiles[profiles.length - 1] });
+    })
   );
 
   const tasks = [];
