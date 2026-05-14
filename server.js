@@ -333,12 +333,16 @@ Return ONLY the JSON array, no other text.`,
 // ---------------------------------------------------------------------------
 // Stage 2 — LegNext.ai / Midjourney
 // ---------------------------------------------------------------------------
-async function submitMidjourneyJob(prompt) {
+const MJ_PROFILE_CARTER = '--profile ptxxc2l';
+const MJ_PROFILE_BRENT = '--profile zc5okgy';
+
+async function submitMidjourneyJob(prompt, { profile = null } = {}) {
   const apiKey = process.env.LEGNEXT_API_KEY;
   if (!apiKey) throw new Error('LEGNEXT_API_KEY not configured');
 
   const pTag = process.env.P_TAG || '';
-  const fullPrompt = pTag ? `${prompt} ${pTag}` : prompt;
+  const profileSuffix = profile ? ` ${profile}` : '';
+  const fullPrompt = pTag ? `${prompt} ${pTag}${profileSuffix}` : `${prompt}${profileSuffix}`;
 
   const res = await fetch(`${LEGNEXT_BASE}/diffusion`, {
     method: 'POST',
@@ -475,7 +479,7 @@ async function generateAllImages(job) {
   job.stage = 'generating_images';
 
   const submissionResults = await Promise.allSettled(
-    job.concepts.map((c) => submitMidjourneyJob(c.prompt))
+    job.concepts.map((c, i) => submitMidjourneyJob(c.prompt, { profile: i < 2 ? MJ_PROFILE_CARTER : MJ_PROFILE_BRENT }))
   );
 
   const tasks = [];
