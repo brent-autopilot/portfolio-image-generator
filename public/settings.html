@@ -392,16 +392,43 @@
     srefFile.addEventListener('change', () => uploadSrefFiles(Array.from(srefFile.files)));
 
     // Paste from clipboard (Cmd+V anywhere on page)
-    document.addEventListener('paste', (e) => {
+    document.addEventListener('paste', async (e) => {
       if (mainEl.style.display === 'none') return;
       const items = Array.from(e.clipboardData?.items || []);
+
       const imageFiles = items
         .filter((item) => item.type.startsWith('image/'))
         .map((item) => item.getAsFile())
         .filter(Boolean);
+
       if (imageFiles.length > 0) {
         e.preventDefault();
         uploadSrefFiles(imageFiles);
+        return;
+      }
+
+      const textItem = items.find((item) => item.type === 'text/plain');
+      if (textItem) {
+        const text = e.clipboardData.getData('text/plain').trim();
+        if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(text)) {
+          e.preventDefault();
+          srefPlusBtn.classList.add('uploading');
+          srefPlusBtn.innerHTML = '<span>Downloading...</span>';
+          try {
+            const imgRes = await fetch(text);
+            if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
+            const blob = await imgRes.blob();
+            if (!blob.type.startsWith('image/')) throw new Error('Not an image');
+            const urlName = text.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 50) || 'pasted url';
+            const file = new File([blob], urlName + '.jpg', { type: blob.type });
+            await uploadSrefFiles([file]);
+          } catch (err) {
+            showStatus(srefStatus, `Failed to fetch image from URL: ${err.message}`, true);
+            srefPlusBtn.classList.remove('uploading');
+            srefPlusBtn.innerHTML = '+ <span>Add Image</span>';
+          }
+          return;
+        }
       }
     });
 
