@@ -265,13 +265,16 @@ CRITICAL RULES:
         role: 'user',
         content: `**FUND NAME:** ${job.fundName}\n**FUND THESIS:** ${thesis}${styleContext}
 
-Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.${directivesParagraph}
+Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.
+
+ANCHOR RULE: Before applying any style or interpretation, identify the OBVIOUS visual subject from the fund name/thesis. For "Silver" that's silver — the metal, the material, the color, the commodity. For "Voyage Fund" that's a ship or journey. For "Hedge the AI Bubble" that's a bubble. This obvious subject must be recognizable in every prompt. The style changes HOW it looks. The interpretation changes the ANGLE. But the core subject stays anchored to the fund. If someone saw only the image with no label, they should intuitively connect it to the fund's subject.${directivesParagraph}
 
 PROMPT LENGTH: 15-30 words. This is a Midjourney prompt, not an art direction brief. One style fragment, one subject, one action or state, one atmospheric detail. No narrative sentences. No multi-sentence descriptions. Every word must earn its place.
 
 Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
-- "concept": a 2-3 word label for the concept
-- "prompt": the Midjourney image prompt (15-30 words, concise)${extraReturnFields}
+- "anchor": the obvious visual subject from the fund name (1-3 words, e.g. "silver metal" or "ship at sea") — state this BEFORE writing the prompt
+- "concept": a 2-3 word label for your creative angle on the anchor
+- "prompt": the Midjourney image prompt (15-30 words, concise) — the anchor subject MUST be recognizable in the prompt${extraReturnFields}
 
 Return ONLY the JSON array, no other text.`,
       },
