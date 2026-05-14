@@ -187,19 +187,41 @@ function pickRandomInterpretations(count) {
 
 // ---------------------------------------------------------------------------
 // Profile Bank — Midjourney --profile tags, one randomly assigned per gen
+// Stored in ARCHIVE_DIR (Railway Volume) so it persists across deploys.
+// Seeded from prompts/profile-bank.md on first boot.
 // ---------------------------------------------------------------------------
+const PROFILE_BANK_FILE = join(ARCHIVE_DIR, 'profile-bank.json');
+
+function seedProfileBankFromMarkdown() {
+  try {
+    const raw = readFileSync(join(__dirname, 'prompts', 'profile-bank.md'), 'utf-8');
+    const afterSeparator = raw.split('\n---\n').pop() || raw;
+    return afterSeparator
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && l.includes('|'))
+      .map((l) => {
+        const [label, tag] = l.split('|').map((s) => s.trim());
+        return { label, tag };
+      })
+      .filter((e) => e.tag && e.tag.startsWith('--profile'));
+  } catch {
+    return [];
+  }
+}
+
 function loadProfileBank() {
-  const raw = readFileSync(join(__dirname, 'prompts', 'profile-bank.md'), 'utf-8');
-  const afterSeparator = raw.split('\n---\n').pop() || raw;
-  return afterSeparator
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l && l.includes('|'))
-    .map((l) => {
-      const [label, tag] = l.split('|').map((s) => s.trim());
-      return { label, tag };
-    })
-    .filter((e) => e.tag.startsWith('--profile'));
+  try {
+    return JSON.parse(readFileSync(PROFILE_BANK_FILE, 'utf-8'));
+  } catch {
+    const seeded = seedProfileBankFromMarkdown();
+    saveProfileBank(seeded);
+    return seeded;
+  }
+}
+
+function saveProfileBank(entries) {
+  writeFileSync(PROFILE_BANK_FILE, JSON.stringify(entries, null, 2));
 }
 
 let PROFILE_BANK = loadProfileBank();
@@ -927,11 +949,8 @@ app.post('/api/settings/profiles', (req, res) => {
   if (!tag || typeof tag !== 'string' || !tag.startsWith('--profile')) {
     return res.status(400).json({ error: 'Tag must start with --profile' });
   }
-  const profilePath = join(__dirname, 'prompts', 'profile-bank.md');
-  const raw = readFileSync(profilePath, 'utf-8');
-  const newLine = `${label.trim()} | ${tag.trim()}`;
-  writeFileSync(profilePath, raw.trimEnd() + '\n' + newLine + '\n');
-  PROFILE_BANK = loadProfileBank();
+  PROFILE_BANK.push({ label: label.trim(), tag: tag.trim() });
+  saveProfileBank(PROFILE_BANK);
   res.json({ ok: true, entry: { label: label.trim(), tag: tag.trim() } });
 });
 
@@ -940,13 +959,8 @@ app.delete('/api/settings/profiles/:index', (req, res) => {
   if (isNaN(idx) || idx < 0 || idx >= PROFILE_BANK.length) {
     return res.status(400).json({ error: 'Invalid index' });
   }
-  const removed = PROFILE_BANK[idx];
-  const profilePath = join(__dirname, 'prompts', 'profile-bank.md');
-  const raw = readFileSync(profilePath, 'utf-8');
-  const entryLine = `${removed.label} | ${removed.tag}`;
-  const updated = raw.split('\n').filter((l) => l.trim() !== entryLine).join('\n');
-  writeFileSync(profilePath, updated);
-  PROFILE_BANK = loadProfileBank();
+  const removed = PROFILE_BANK.splice(idx, 1)[0];
+  saveProfileBank(PROFILE_BANK);
   res.json({ ok: true, removed: removed.label });
 });
 
@@ -1016,6 +1030,48 @@ app.delete('/api/settings/sref/:index', (req, res) => {
   }
 
   res.json({ ok: true, removed: removed.name });
+});
+
+app.post('/api/settings/sref-from-url', async (req, res) => {
+  const { url } = req.body;
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+    return res.status(400).json({ error: 'Valid image URL is required' });
+  }
+
+  try {
+    const imgRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
+    const contentType = imgRes.headers.get('content-type') || '';
+    if (!contentType.startsWith('image/')) throw new Error('URL did not return an image');
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+
+    const urlName = url.split('/').pop().split('?')[0]
+      .replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 50).trim() || 'imported';
+    const slug = urlName.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 50);
+    const uniqueId = crypto.randomUUID().slice(0, 8);
+    const filename = `${slug}-${uniqueId}.jpg`;
+    const srefDir = getSrefDir();
+    const filepath = join(srefDir, filename);
+
+    await sharp(buffer)
+      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toFile(filepath);
+
+    const bank = loadSrefBank();
+    bank.push({ name: urlName, filename, addedAt: new Date().toISOString() });
+    saveSrefBank(bank);
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const baseUrl = `${protocol}://${req.get('host')}`;
+    res.json({
+      ok: true,
+      entry: { name: urlName, filename, url: `${baseUrl}/api/sref-image/${filename}` },
+    });
+  } catch (err) {
+    console.error('[sref-from-url] Failed:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to fetch image from URL' });
+  }
 });
 
 // --- Sref image serve (public — Midjourney needs access) ---
