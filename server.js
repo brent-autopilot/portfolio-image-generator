@@ -9,6 +9,7 @@ import os from 'os';
 import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 import sharp from 'sharp';
+import multer from 'multer';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -17,6 +18,7 @@ app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT || 3000;
 const SITE_PASSWORD = process.env.SITE_PASSWORD || 'autopilot';
+const SETTINGS_PASSWORD = process.env.SETTINGS_PASSWORD || 'growth101';
 
 // ---------------------------------------------------------------------------
 // Auth — simple password gate with HMAC session token
@@ -28,6 +30,7 @@ function makeToken(password) {
 }
 
 const VALID_TOKEN = makeToken(SITE_PASSWORD);
+const SETTINGS_TOKEN = makeToken(SETTINGS_PASSWORD + '_settings');
 
 function parseCookies(header) {
   const cookies = {};
@@ -50,6 +53,17 @@ function isAuthed(req) {
   }
 }
 
+function isSettingsAuthed(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies.settings_token || '';
+  if (token.length !== SETTINGS_TOKEN.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(SETTINGS_TOKEN));
+  } catch {
+    return false;
+  }
+}
+
 app.post('/api/auth', (req, res) => {
   const { password } = req.body;
   if (typeof password !== 'string' || password !== SITE_PASSWORD) {
@@ -63,15 +77,42 @@ app.get('/api/auth/check', (req, res) => {
   res.json({ authed: isAuthed(req) });
 });
 
+app.post('/api/settings/auth', (req, res) => {
+  const { password } = req.body;
+  if (typeof password !== 'string' || password !== SETTINGS_PASSWORD) {
+    return res.status(401).json({ error: 'Wrong password' });
+  }
+  res.setHeader('Set-Cookie', `settings_token=${SETTINGS_TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400`);
+  res.json({ ok: true });
+});
+
+app.get('/api/settings/auth/check', (req, res) => {
+  res.json({ authed: isSettingsAuthed(req) });
+});
+
 // Serve static files (login page is always accessible)
 app.use(express.static(join(__dirname, 'public')));
 
 // Protect all other API routes
 app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth')) return next();
+  if (req.path.startsWith('/settings/auth')) return next();
+  if (req.path.startsWith('/sref-image/')) return next();
+  if (req.path.startsWith('/settings/')) {
+    if (!isSettingsAuthed(req)) return res.status(401).json({ error: 'Unauthorized' });
+    return next();
+  }
   if (!isAuthed(req)) return res.status(401).json({ error: 'Unauthorized' });
   next();
 });
+
+const ARCHIVE_DIR = join(__dirname, 'archive');
+const QUADRANT_DIR = join(__dirname, 'quadrants');
+const HISTORY_FILE = join(ARCHIVE_DIR, 'history.json');
+const DOWNLOADS_DIR = join(os.homedir(), 'Downloads');
+
+if (!existsSync(ARCHIVE_DIR)) mkdirSync(ARCHIVE_DIR, { recursive: true });
+if (!existsSync(QUADRANT_DIR)) mkdirSync(QUADRANT_DIR, { recursive: true });
 
 const LEGNEXT_BASE = 'https://api.legnext.ai/api/v1';
 const NUM_CONCEPTS = 3;
@@ -142,6 +183,72 @@ function pickRandomInterpretations(count) {
     picks.push(pool.splice(idx, 1)[0]);
   }
   return picks;
+}
+
+// ---------------------------------------------------------------------------
+// Profile Bank — Midjourney --profile tags, one randomly assigned per gen
+// ---------------------------------------------------------------------------
+function loadProfileBank() {
+  const raw = readFileSync(join(__dirname, 'prompts', 'profile-bank.md'), 'utf-8');
+  const afterSeparator = raw.split('\n---\n').pop() || raw;
+  return afterSeparator
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && l.includes('|'))
+    .map((l) => {
+      const [label, tag] = l.split('|').map((s) => s.trim());
+      return { label, tag };
+    })
+    .filter((e) => e.tag.startsWith('--profile'));
+}
+
+let PROFILE_BANK = loadProfileBank();
+
+function pickRandomProfiles(count) {
+  const pool = [...PROFILE_BANK];
+  const picks = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picks.push(pool.splice(idx, 1)[0]);
+  }
+  while (picks.length < count) {
+    picks.push(PROFILE_BANK[Math.floor(Math.random() * PROFILE_BANK.length)]);
+  }
+  return picks;
+}
+
+// ---------------------------------------------------------------------------
+// Style Reference Bank — --sref images for Gen 3
+// ---------------------------------------------------------------------------
+const STYLE_WEIGHT = 5;
+
+function getSrefDir() {
+  const dir = join(ARCHIVE_DIR, 'sref');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function getSrefBankFile() {
+  return join(ARCHIVE_DIR, 'sref-bank.json');
+}
+
+function loadSrefBank() {
+  try {
+    return JSON.parse(readFileSync(getSrefBankFile(), 'utf-8'));
+  } catch {
+    return [];
+  }
+}
+
+function saveSrefBank(entries) {
+  writeFileSync(getSrefBankFile(), JSON.stringify(entries, null, 2));
+}
+
+function pickRandomSref(baseUrl) {
+  const bank = loadSrefBank();
+  if (bank.length === 0) return null;
+  const pick = bank[Math.floor(Math.random() * bank.length)];
+  return { name: pick.name, url: `${baseUrl}/api/sref-image/${pick.filename}` };
 }
 
 function loadClogPrompt() {
@@ -333,17 +440,16 @@ Return ONLY the JSON array, no other text.`,
 // ---------------------------------------------------------------------------
 // Stage 2 — LegNext.ai / Midjourney
 // ---------------------------------------------------------------------------
-const MJ_PROFILE_CARTER = '--profile ptxxc2l';
-const MJ_PROFILE_BRENT = '--profile zc5okgy';
-const MJ_PROFILE_BRENT_V2 = '--profile 263fx7r';
-
-async function submitMidjourneyJob(prompt, { profile = null } = {}) {
+async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = null } = {}) {
   const apiKey = process.env.LEGNEXT_API_KEY;
   if (!apiKey) throw new Error('LEGNEXT_API_KEY not configured');
 
   const pTag = process.env.P_TAG || '';
   const profileSuffix = profile ? ` ${profile}` : '';
-  const fullPrompt = pTag ? `${prompt} ${pTag}${profileSuffix}` : `${prompt}${profileSuffix}`;
+  const srefSuffix = sref ? ` --sref ${sref} --sw ${sw ?? STYLE_WEIGHT}` : '';
+  const fullPrompt = pTag
+    ? `${prompt} ${pTag}${profileSuffix}${srefSuffix}`
+    : `${prompt}${profileSuffix}${srefSuffix}`;
 
   const res = await fetch(`${LEGNEXT_BASE}/diffusion`, {
     method: 'POST',
@@ -479,10 +585,25 @@ async function cropGridToQuadrants(gridUrl, jobId, gridIndex) {
 async function generateAllImages(job) {
   job.stage = 'generating_images';
 
+  const profiles = pickRandomProfiles(NUM_CONCEPTS);
+  const protocol = 'https';
+  const host = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.HOST || `localhost:${PORT}`;
+  const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `${protocol}://${host}` : `http://${host}`;
+  const sref = pickRandomSref(baseUrl);
+
+  job.assignedProfiles = profiles.map((p) => p.label);
+  job.assignedSref = sref ? sref.name : null;
+  console.log(`[job ${job.id}] Profiles: ${profiles.map((p) => p.label).join(', ')}`);
+  if (sref) console.log(`[job ${job.id}] Sref for Gen 3: "${sref.name}" → ${sref.url}`);
+
   const submissionResults = await Promise.allSettled(
     job.concepts.map((c, i) => {
-      const profiles = [MJ_PROFILE_CARTER, MJ_PROFILE_BRENT, MJ_PROFILE_BRENT_V2];
-      return submitMidjourneyJob(c.prompt, { profile: profiles[i] || profiles[profiles.length - 1] });
+      const opts = { profile: profiles[i].tag };
+      if (i === NUM_CONCEPTS - 1 && sref) {
+        opts.sref = sref.url;
+        opts.sw = STYLE_WEIGHT;
+      }
+      return submitMidjourneyJob(c.prompt, opts);
     })
   );
 
@@ -783,6 +904,132 @@ app.get('/api/banks', (_req, res) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Settings API — Profile bank + Style Reference CRUD (settings password)
+// ---------------------------------------------------------------------------
+const srefUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
+
+// --- Profile Bank CRUD ---
+app.get('/api/settings/profiles', (_req, res) => {
+  res.json(PROFILE_BANK);
+});
+
+app.post('/api/settings/profiles', (req, res) => {
+  const { label, tag } = req.body;
+  if (!label || typeof label !== 'string') return res.status(400).json({ error: 'Label is required' });
+  if (!tag || typeof tag !== 'string' || !tag.startsWith('--profile')) {
+    return res.status(400).json({ error: 'Tag must start with --profile' });
+  }
+  const profilePath = join(__dirname, 'prompts', 'profile-bank.md');
+  const raw = readFileSync(profilePath, 'utf-8');
+  const newLine = `${label.trim()} | ${tag.trim()}`;
+  writeFileSync(profilePath, raw.trimEnd() + '\n' + newLine + '\n');
+  PROFILE_BANK = loadProfileBank();
+  res.json({ ok: true, entry: { label: label.trim(), tag: tag.trim() } });
+});
+
+app.delete('/api/settings/profiles/:index', (req, res) => {
+  const idx = parseInt(req.params.index, 10);
+  if (isNaN(idx) || idx < 0 || idx >= PROFILE_BANK.length) {
+    return res.status(400).json({ error: 'Invalid index' });
+  }
+  const removed = PROFILE_BANK[idx];
+  const profilePath = join(__dirname, 'prompts', 'profile-bank.md');
+  const raw = readFileSync(profilePath, 'utf-8');
+  const entryLine = `${removed.label} | ${removed.tag}`;
+  const updated = raw.split('\n').filter((l) => l.trim() !== entryLine).join('\n');
+  writeFileSync(profilePath, updated);
+  PROFILE_BANK = loadProfileBank();
+  res.json({ ok: true, removed: removed.label });
+});
+
+// --- Style Reference CRUD ---
+app.get('/api/settings/sref', (_req, res) => {
+  const bank = loadSrefBank();
+  const protocol = _req.headers['x-forwarded-proto'] || _req.protocol;
+  const baseUrl = `${protocol}://${_req.get('host')}`;
+  const entries = bank.map((e, i) => ({
+    index: i,
+    name: e.name,
+    filename: e.filename,
+    url: `${baseUrl}/api/sref-image/${e.filename}`,
+    addedAt: e.addedAt || null,
+  }));
+  res.json(entries);
+});
+
+app.post('/api/settings/sref', srefUpload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+  if (name.length > 100) return res.status(400).json({ error: 'Name too long' });
+
+  try {
+    const slug = name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 50);
+    const uniqueId = crypto.randomUUID().slice(0, 8);
+    const filename = `${slug}-${uniqueId}.jpg`;
+    const srefDir = getSrefDir();
+    const filepath = join(srefDir, filename);
+
+    await sharp(req.file.buffer)
+      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toFile(filepath);
+
+    const bank = loadSrefBank();
+    bank.push({ name, filename, addedAt: new Date().toISOString() });
+    saveSrefBank(bank);
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const baseUrl = `${protocol}://${req.get('host')}`;
+    res.json({
+      ok: true,
+      entry: { name, filename, url: `${baseUrl}/api/sref-image/${filename}` },
+    });
+  } catch (err) {
+    console.error('[sref] Upload failed:', err.message);
+    res.status(500).json({ error: 'Failed to process image' });
+  }
+});
+
+app.delete('/api/settings/sref/:index', (req, res) => {
+  const idx = parseInt(req.params.index, 10);
+  const bank = loadSrefBank();
+  if (isNaN(idx) || idx < 0 || idx >= bank.length) {
+    return res.status(400).json({ error: 'Invalid index' });
+  }
+
+  const removed = bank.splice(idx, 1)[0];
+  saveSrefBank(bank);
+
+  const filepath = join(getSrefDir(), removed.filename);
+  if (existsSync(filepath)) {
+    try { unlinkSync(filepath); } catch {}
+  }
+
+  res.json({ ok: true, removed: removed.name });
+});
+
+// --- Sref image serve (public — Midjourney needs access) ---
+app.get('/api/sref-image/:filename', (req, res) => {
+  const requested = req.params.filename;
+  const safe = basename(requested);
+  if (safe !== requested || !requested) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const filepath = join(getSrefDir(), safe);
+  if (!existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
+  res.type('image/jpeg').sendFile(filepath);
+});
+
 app.get('/api/quadrant/:jobId/:filename', (req, res) => {
   const { jobId, filename } = req.params;
   const safeJobId = basename(jobId);
@@ -798,13 +1045,6 @@ app.get('/api/quadrant/:jobId/:filename', (req, res) => {
 // ---------------------------------------------------------------------------
 // Image archive — download and persist every generated image
 // ---------------------------------------------------------------------------
-const ARCHIVE_DIR = join(__dirname, 'archive');
-const QUADRANT_DIR = join(__dirname, 'quadrants');
-const HISTORY_FILE = join(ARCHIVE_DIR, 'history.json');
-const DOWNLOADS_DIR = join(os.homedir(), 'Downloads');
-
-if (!existsSync(ARCHIVE_DIR)) mkdirSync(ARCHIVE_DIR, { recursive: true });
-if (!existsSync(QUADRANT_DIR)) mkdirSync(QUADRANT_DIR, { recursive: true });
 
 let historyCache = null;
 
