@@ -175,6 +175,11 @@
     }
     .sref-card:hover .sref-card-delete { opacity: 0.7; }
     .sref-card-delete:hover { opacity: 1 !important; }
+    .sref-dropzone { position: relative; }
+    .sref-dropzone.drag-over .plus-btn {
+      border-color: var(--pass); color: var(--pass);
+      background: rgba(52, 211, 153, 0.06);
+    }
     .empty-msg { color: var(--text-dim); font-size: 13px; padding: 30px 0; text-align: center; }
   </style>
 </head>
@@ -214,9 +219,11 @@
       <div class="section-header">
         <div class="section-title">Style References <span id="sref-count" class="section-count">0</span></div>
       </div>
-      <div class="section-desc">Reference images for Midjourney --sref. One is randomly applied to Generation 3 each run.</div>
-      <button id="sref-plus-btn" class="plus-btn" title="Add style reference">+ <span>Add Image</span></button>
-      <input id="sref-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none" />
+      <div class="section-desc">Reference images for Midjourney --sref. One is randomly applied to Generation 3 each run. Click + to browse, drag and drop, or paste from clipboard.</div>
+      <div id="sref-dropzone" class="sref-dropzone">
+        <button id="sref-plus-btn" class="plus-btn" title="Add style reference">+ <span>Add Image</span></button>
+        <input id="sref-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none" />
+      </div>
       <div id="sref-status" class="status-msg hidden"></div>
       <div id="sref-grid" class="sref-grid"></div>
     </div>
@@ -341,22 +348,23 @@
     // --- Style References ---
     const srefPlusBtn = document.getElementById('sref-plus-btn');
     const srefFile = document.getElementById('sref-file');
+    const srefDropzone = document.getElementById('sref-dropzone');
     const srefCount = document.getElementById('sref-count');
     const srefGrid = document.getElementById('sref-grid');
     const srefStatus = document.getElementById('sref-status');
+    let _srefUploading = false;
 
-    srefPlusBtn.addEventListener('click', () => srefFile.click());
-
-    srefFile.addEventListener('change', async () => {
-      const files = Array.from(srefFile.files);
-      if (files.length === 0) return;
-
+    async function uploadSrefFiles(files) {
+      if (_srefUploading || files.length === 0) return;
+      _srefUploading = true;
       srefPlusBtn.classList.add('uploading');
       srefPlusBtn.innerHTML = '<span>Uploading...</span>';
       let uploaded = 0;
 
       for (const file of files) {
-        const name = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'untitled';
+        if (!file.type.startsWith('image/')) continue;
+        const name = (file.name || 'pasted-image')
+          .replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'pasted image';
         try {
           const fd = new FormData();
           fd.append('name', name);
@@ -366,7 +374,7 @@
           if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
           uploaded++;
         } catch (err) {
-          showStatus(srefStatus, `Failed: ${file.name} — ${err.message}`, true);
+          showStatus(srefStatus, `Failed: ${name} — ${err.message}`, true);
         }
       }
 
@@ -376,7 +384,46 @@
       if (uploaded > 0) {
         showStatus(srefStatus, `Added ${uploaded} image${uploaded > 1 ? 's' : ''}`, false);
       }
+      _srefUploading = false;
       await loadSrefs();
+    }
+
+    srefPlusBtn.addEventListener('click', () => srefFile.click());
+    srefFile.addEventListener('change', () => uploadSrefFiles(Array.from(srefFile.files)));
+
+    // Paste from clipboard (Cmd+V anywhere on page)
+    document.addEventListener('paste', (e) => {
+      if (mainEl.style.display === 'none') return;
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageFiles = items
+        .filter((item) => item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter(Boolean);
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        uploadSrefFiles(imageFiles);
+      }
+    });
+
+    // Drag and drop
+    let _dragCounter = 0;
+    srefDropzone.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      _dragCounter++;
+      srefDropzone.classList.add('drag-over');
+    });
+    srefDropzone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      _dragCounter--;
+      if (_dragCounter <= 0) { _dragCounter = 0; srefDropzone.classList.remove('drag-over'); }
+    });
+    srefDropzone.addEventListener('dragover', (e) => e.preventDefault());
+    srefDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      _dragCounter = 0;
+      srefDropzone.classList.remove('drag-over');
+      const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+      if (files.length > 0) uploadSrefFiles(files);
     });
 
     async function loadSrefs() {
