@@ -262,6 +262,18 @@ function loadSrefBank() {
   }
 }
 
+function deduplicateSrefName(name) {
+  const bank = loadSrefBank();
+  const base = name.replace(/\s*\d+$/, '').trim();
+  const existing = bank.filter((e) => e.name === base || e.name.match(new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+\\d+$`)));
+  if (existing.length === 0 && !bank.some((e) => e.name === name)) return name;
+  const nums = existing.map((e) => {
+    const m = e.name.match(/\s+(\d+)$/);
+    return m ? parseInt(m[1], 10) : 1;
+  });
+  return `${base} ${Math.max(0, ...nums) + 1}`;
+}
+
 function saveSrefBank(entries) {
   writeFileSync(getSrefBankFile(), JSON.stringify(entries, null, 2));
 }
@@ -982,9 +994,10 @@ app.get('/api/settings/sref', (_req, res) => {
 app.post('/api/settings/sref', srefUpload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image file provided' });
 
-  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
-  if (!name) return res.status(400).json({ error: 'Name is required' });
-  if (name.length > 100) return res.status(400).json({ error: 'Name too long' });
+  const rawName = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if (!rawName) return res.status(400).json({ error: 'Name is required' });
+  if (rawName.length > 100) return res.status(400).json({ error: 'Name too long' });
+  const name = deduplicateSrefName(rawName);
 
   try {
     const slug = name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 50);
@@ -1045,8 +1058,9 @@ app.post('/api/settings/sref-from-url', async (req, res) => {
     if (!contentType.startsWith('image/')) throw new Error('URL did not return an image');
     const buffer = Buffer.from(await imgRes.arrayBuffer());
 
-    const urlName = url.split('/').pop().split('?')[0]
-      .replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 50).trim() || 'imported';
+    const rawUrlName = url.split('/').pop().split('?')[0]
+      .replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 50).trim() || 'image';
+    const urlName = deduplicateSrefName(rawUrlName);
     const slug = urlName.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 50);
     const uniqueId = crypto.randomUUID().slice(0, 8);
     const filename = `${slug}-${uniqueId}.jpg`;

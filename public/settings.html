@@ -363,8 +363,8 @@
 
       for (const file of files) {
         if (!file.type.startsWith('image/')) continue;
-        const name = (file.name || 'pasted-image')
-          .replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'pasted image';
+        const name = (file.name || 'image')
+          .replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'image';
         try {
           const fd = new FormData();
           fd.append('name', name);
