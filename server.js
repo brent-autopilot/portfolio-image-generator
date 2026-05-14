@@ -242,7 +242,7 @@ function pickRandomProfiles(count) {
 // ---------------------------------------------------------------------------
 // Style Reference Bank — --sref images for Gen 3
 // ---------------------------------------------------------------------------
-const STYLE_WEIGHT = 5;
+const STYLE_WEIGHT = 100;
 
 function getSrefDir() {
   const dir = join(ARCHIVE_DIR, 'sref');
