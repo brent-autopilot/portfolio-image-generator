@@ -77,7 +77,7 @@ Material Studies (metal, glass, stone, fabric, liquid)
 Collage & Mixed Media (torn paper, found objects, photographic transfer)
 Street Art (graffiti, stencil, wheat paste, spray paint)
 
-CURRENT COUNT: ~303 entries
+CURRENT COUNT: ~328 entries
 =============================================================================
 -->
 
@@ -386,3 +386,28 @@ neon contour illustration, single continuous glowing line drawing on deep black 
 David Carson deconstructed layout, fragmented overlapping imagery with aggressive raw typography
 Kurt Schwitters merzbau collage, layered found materials with architectural spatial depth
 Robert Rauschenberg combine, photographic transfer mixed with paint and found objects on canvas
+carbon fiber fund emblem, woven composite texture with clear-coat depth and angled studio light
+liquid mercury fund logo, reflective pooling metallic mark on obsidian surface with distortion
+etched sapphire fund mark, precision-cut crystalline form with internal light refraction on black
+ceramic fund emblem, matte white porcelain with hairline gold kintsugi veins on dark ground
+negative-space fund logo, subject defined entirely by absence, sharp cutout in brushed steel sheet
+obsidian glass fund mark, volcanic black with razor edge catch light and deep mirror reflection
+damascus steel fund emblem, folded metal pattern with acid-etched detail on dark leather
+embossed linen fund logo, blind deboss on heavy cotton stock with raking light revealing depth
+titanium nitride fund mark, rainbow PVD coating on machined metal with controlled specular
+wax seal fund emblem, deep crimson impression in sealing wax with fine heraldic detail
+holographic fund logo, diffractive foil surface shifting color with viewing angle on matte black
+concrete brutalist fund mark, raw board-formed cement with exposed aggregate on charcoal ground
+oxidized silver fund emblem, tarnished sterling with selective polish revealing bright detail
+anodized aluminum fund logo, gradient color shift across machined surface with chamfered edges
+cast resin fund mark, translucent amber encasing metallic core with internal light scatter
+hammered copper fund emblem, hand-beaten surface with warm patina and dramatic directional light
+acid-etched brass fund logo, chemically darkened recesses with polished raised surfaces on slate
+lacquered ebony fund mark, piano-black gloss surface with gold pinstripe detail and deep reflection
+frosted titanium fund emblem, vapor-blasted matte surface with precise machined geometry
+marble inlay fund logo, pietra dura technique with semi-precious stone on nero marquina
+woven metal fund mark, interlaced fine wire strands in white gold forming dimensional surface
+smoked glass fund emblem, dark transparent volume with edge-lit glow and trapped geometry
+patinated bronze fund seal, aged medallion with verdigris and gold remnants on dark velvet
+laser-sintered fund mark, 3D-printed metal powder with visible additive layers and raw finish
+electroformed copper fund emblem, organic crystalline growth pattern with iridescent tarnish

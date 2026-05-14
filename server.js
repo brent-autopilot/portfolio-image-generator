@@ -216,7 +216,9 @@ async function generateThemes(job) {
     ? `\n\nUse this visual style JSON for atmospheric tone only:\n${JSON.stringify(job.styleJson, null, 2)}`
     : '';
 
-  const thesis = job.fundThesis || job.fundName;
+  const thesis = job.fundThesis && job.fundThesis.trim()
+    ? job.fundThesis.trim()
+    : `A fund called "${job.fundName}" — use the name itself to infer the investment thesis and visual subject`;
 
   let directivesParagraph = '';
   let extraReturnFields = '';
@@ -248,7 +250,7 @@ ${directives}
 
 CRITICAL RULES:
 - The style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
-- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation leads to a scene unrelated to the fund, you've gone too far. Pull it back. Example: for a mortgage fund, "interpret through a specific profession" should show a MORTGAGE-related profession (appraiser, auctioneer), not an unrelated one (surgeon, chef).
+- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back. Example: for a mortgage fund, "interpret through architecture" should show mortgage-related architecture (foreclosed house, bank vault), not unrelated buildings.
 - The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
 
     extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
@@ -263,18 +265,33 @@ CRITICAL RULES:
     messages: [
       {
         role: 'user',
-        content: `**FUND NAME:** ${job.fundName}\n**FUND THESIS:** ${thesis}${styleContext}
+        content: `THE FUND (this is the most important input — everything else serves this):
 
-Generate exactly ${NUM_CONCEPTS} completely different image concepts for this fund. Each concept must use a different visual metaphor, subject, and scene — no overlap.
+  FUND NAME: "${job.fundName}"
+  FUND THESIS: "${thesis}"
 
-ANCHOR RULE: Before applying any style or interpretation, identify the OBVIOUS visual subject from the fund name/thesis. For "Silver" that's silver — the metal, the material, the color, the commodity. For "Voyage Fund" that's a ship or journey. For "Hedge the AI Bubble" that's a bubble. This obvious subject must be recognizable in every prompt. The style changes HOW it looks. The interpretation changes the ANGLE. But the core subject stays anchored to the fund. If someone saw only the image with no label, they should intuitively connect it to the fund's subject.${directivesParagraph}
+Read the fund name and thesis carefully. What does this fund actually DO? What is it about? What would a normal person picture when they hear this name? That mental image is the foundation of every prompt you write. Nothing — no style, no interpretation, no creative angle — overrides this.
 
-PROMPT LENGTH: 15-30 words. This is a Midjourney prompt, not an art direction brief. One style fragment, one subject, one action or state, one atmospheric detail. No narrative sentences. No multi-sentence descriptions. Every word must earn its place.
+ANCHOR RULE: Identify the OBVIOUS visual subject from the fund name/thesis FIRST.
+- "Silver" → silver metal, silver material, silver color
+- "Voyage Fund" → a ship, a journey, open water
+- "Hedge the AI Bubble" → a bubble, something being hedged
+- "Photonics" → light, optics, photons, lenses, fiber
+This anchor subject MUST be the dominant, recognizable element in every single prompt. If someone saw only the image with no label, they should intuitively connect it to the fund.${directivesParagraph}
+
+Generate exactly ${NUM_CONCEPTS} completely different image concepts. Each must use a different visual metaphor, subject, and scene — no overlap. But ALL must clearly be about this fund.
+
+HIERARCHY OF IMPORTANCE:
+1. THE FUND (anchor subject from fund name/thesis) — non-negotiable, always dominant
+2. THE INTERPRETATION (creative angle) — shapes how you approach the anchor, never replaces it
+3. THE STYLE (rendering treatment) — controls how it looks, never changes what it depicts
+
+PROMPT LENGTH: 20-45 words. Vary naturally — some concepts need more detail, some are stronger spare. Include: style/medium, anchor subject, action or state, atmospheric detail. Add a second visual detail if it strengthens the image. NO narrative sentences — use evocative fragments separated by commas. Every word must earn its place.${styleContext}
 
 Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
 - "anchor": the obvious visual subject from the fund name (1-3 words, e.g. "silver metal" or "ship at sea") — state this BEFORE writing the prompt
 - "concept": a 2-3 word label for your creative angle on the anchor
-- "prompt": the Midjourney image prompt (15-30 words, concise) — the anchor subject MUST be recognizable in the prompt${extraReturnFields}
+- "prompt": the Midjourney image prompt (20-45 words, evocative fragments not sentences) — the anchor subject MUST be the dominant element${extraReturnFields}
 
 Return ONLY the JSON array, no other text.`,
       },

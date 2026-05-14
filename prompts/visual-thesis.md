@@ -143,7 +143,7 @@ STEP 6 — COMPRESS FOR MIDJOURNEY
 
 Steps 1-5 are your internal creative process. Do NOT output the full brief.
 
-Compress your result into a single flowing Midjourney prompt of 15-30 words. Include: the style/medium, the core subject, one key action or state, and one atmospheric detail. Cut everything else. Midjourney responds best to concise, evocative fragments — not narrative descriptions.
+Compress your result into a single flowing Midjourney prompt of 20-45 words. Include: style/medium, core subject, one key action or state, and atmospheric detail. Add a second visual detail if it strengthens the image. Vary length naturally — some images need more, some are stronger spare. Use evocative comma-separated fragments, NOT narrative sentences. Midjourney ignores prose.
 
 WRONG (too long): "Scratchboard illustration, white lines incised into black-inked board. A family of four silhouettes stands before their small house, moving boxes stacked beside them, while a larger figure in a suit approaches with papers in hand. Fine white crosshatching reveals the worn textures."
 
