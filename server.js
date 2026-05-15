@@ -478,12 +478,10 @@ async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = n
   const apiKey = process.env.LEGNEXT_API_KEY;
   if (!apiKey) throw new Error('LEGNEXT_API_KEY not configured');
 
-  const pTag = process.env.P_TAG || '';
   const profileSuffix = profile ? ` ${profile}` : '';
   const srefSuffix = sref ? ` --sref ${sref} --sw ${sw ?? STYLE_WEIGHT}` : '';
-  const fullPrompt = pTag
-    ? `${prompt} ${pTag}${profileSuffix}${srefSuffix}`
-    : `${prompt}${profileSuffix}${srefSuffix}`;
+  const fullPrompt = `${prompt}${profileSuffix}${srefSuffix}`;
+  console.log(`[midjourney] Submitting prompt: ${fullPrompt.slice(0, 200)}...`);
 
   const res = await fetch(`${LEGNEXT_BASE}/diffusion`, {
     method: 'POST',
@@ -647,7 +645,17 @@ async function generateAllImages(job) {
     if (result.status === 'fulfilled') {
       tasks.push({ taskId: result.value, concept: job.concepts[i] });
     } else {
-      console.error(`[job ${job.id}] Failed to submit concept "${job.concepts[i].concept}":`, result.reason?.message);
+      const errMsg = result.reason?.message || 'Unknown error';
+      console.error(`[job ${job.id}] Failed to submit concept ${i + 1} "${job.concepts[i].concept}": ${errMsg}`);
+      if (i === NUM_CONCEPTS - 1 && sref) {
+        console.log(`[job ${job.id}] Retrying Gen ${i + 1} without --sref...`);
+        try {
+          const retryId = await submitMidjourneyJob(job.concepts[i].prompt, { profile: profiles[i].tag });
+          tasks.push({ taskId: retryId, concept: job.concepts[i] });
+        } catch (retryErr) {
+          console.error(`[job ${job.id}] Retry also failed: ${retryErr.message}`);
+        }
+      }
     }
   }
 
@@ -668,7 +676,7 @@ async function generateAllImages(job) {
 
   for (let i = 0; i < gridResults.length; i++) {
     if (gridResults[i].status === 'rejected') {
-      console.error(`[job ${job.id}] Grid poll failed for "${tasks[i].concept.concept}":`, gridResults[i].reason?.message);
+      console.error(`[job ${job.id}] Grid poll failed for Gen ${i + 1} "${tasks[i].concept.concept}": ${gridResults[i].reason?.message}`);
       continue;
     }
 
