@@ -618,9 +618,10 @@ async function generateAllImages(job) {
   job.stage = 'generating_images';
 
   const profiles = pickRandomProfiles(NUM_CONCEPTS);
-  const protocol = 'https';
-  const host = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.HOST || `localhost:${PORT}`;
-  const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `${protocol}://${host}` : `http://${host}`;
+  const rpd = process.env.RAILWAY_PUBLIC_DOMAIN;
+  const host = rpd || process.env.HOST || `localhost:${PORT}`;
+  const baseUrl = rpd ? `https://${host}` : `http://${host}`;
+  console.log(`[job ${job.id}] RAILWAY_PUBLIC_DOMAIN=${rpd || '(not set)'}, baseUrl=${baseUrl}`);
   const sref = pickRandomSref(baseUrl);
 
   job.assignedProfiles = profiles.map((p) => p.label);
@@ -671,6 +672,26 @@ async function generateAllImages(job) {
   );
 
   console.log(`[job ${job.id}] Grids complete, cropping quadrants...`);
+
+  // Retry Gen 3 without --sref if it failed during polling
+  const lastIdx = gridResults.length - 1;
+  if (sref && gridResults[lastIdx] &&
+      (gridResults[lastIdx].status === 'rejected' || !gridResults[lastIdx].value?.imageUrl)) {
+    const failReason = gridResults[lastIdx].status === 'rejected'
+      ? gridResults[lastIdx].reason?.message : 'No image URL returned';
+    console.error(`[job ${job.id}] Gen 3 failed with --sref (${failReason}). Retrying without --sref...`);
+    try {
+      const retryId = await submitMidjourneyJob(
+        tasks[lastIdx].concept.prompt,
+        { profile: profiles[profiles.length - 1].tag }
+      );
+      const retryGrid = await pollGridJob(retryId);
+      gridResults[lastIdx] = { status: 'fulfilled', value: retryGrid };
+      console.log(`[job ${job.id}] Gen 3 retry succeeded`);
+    } catch (retryErr) {
+      console.error(`[job ${job.id}] Gen 3 retry also failed: ${retryErr.message}`);
+    }
+  }
 
   const allImages = [];
 
