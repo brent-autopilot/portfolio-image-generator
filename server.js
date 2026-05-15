@@ -285,6 +285,25 @@ function pickRandomSref(baseUrl) {
   return { name: pick.name, url: `${baseUrl}/api/sref-image/${pick.filename}` };
 }
 
+async function verifySrefUrl(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
+    if (!res.ok) {
+      console.error(`[sref-verify] HEAD ${url} returned ${res.status}`);
+      return false;
+    }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.startsWith('image/')) {
+      console.error(`[sref-verify] ${url} returned content-type: ${ct}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[sref-verify] Failed to reach ${url}: ${err.message}`);
+    return false;
+  }
+}
+
 function loadClogPrompt() {
   try {
     const raw = readFileSync(join(__dirname, 'prompts', 'clog-qc.md'), 'utf-8');
@@ -621,13 +640,26 @@ async function generateAllImages(job) {
   const rpd = process.env.RAILWAY_PUBLIC_DOMAIN;
   const host = rpd || process.env.HOST || `localhost:${PORT}`;
   const baseUrl = rpd ? `https://${host}` : `http://${host}`;
-  console.log(`[job ${job.id}] RAILWAY_PUBLIC_DOMAIN=${rpd || '(not set)'}, baseUrl=${baseUrl}`);
-  const sref = pickRandomSref(baseUrl);
+  const srefCandidate = pickRandomSref(baseUrl);
+
+  let sref = null;
+  if (srefCandidate) {
+    if (!rpd) {
+      console.warn(`[job ${job.id}] RAILWAY_PUBLIC_DOMAIN not set — skipping --sref (Midjourney can't reach localhost)`);
+    } else {
+      const reachable = await verifySrefUrl(srefCandidate.url);
+      if (reachable) {
+        sref = srefCandidate;
+        console.log(`[job ${job.id}] Sref verified OK: "${sref.name}" → ${sref.url}`);
+      } else {
+        console.warn(`[job ${job.id}] Sref URL not reachable, proceeding without --sref`);
+      }
+    }
+  }
 
   job.assignedProfiles = profiles.map((p) => p.label);
   job.assignedSref = sref ? sref.name : null;
   console.log(`[job ${job.id}] Profiles: ${profiles.map((p) => p.label).join(', ')}`);
-  if (sref) console.log(`[job ${job.id}] Sref for Gen 3: "${sref.name}" → ${sref.url}`);
 
   const submissionResults = await Promise.allSettled(
     job.concepts.map((c, i) => {
@@ -644,17 +676,19 @@ async function generateAllImages(job) {
   for (let i = 0; i < submissionResults.length; i++) {
     const result = submissionResults[i];
     if (result.status === 'fulfilled') {
-      tasks.push({ taskId: result.value, concept: job.concepts[i] });
+      tasks.push({ taskId: result.value, concept: job.concepts[i], usedSref: i === NUM_CONCEPTS - 1 && !!sref });
     } else {
       const errMsg = result.reason?.message || 'Unknown error';
-      console.error(`[job ${job.id}] Failed to submit concept ${i + 1} "${job.concepts[i].concept}": ${errMsg}`);
+      console.error(`[job ${job.id}] Submission failed Gen ${i + 1} "${job.concepts[i].concept}": ${errMsg}`);
+      // Auto-retry without --sref if that was the gen that had it
       if (i === NUM_CONCEPTS - 1 && sref) {
         console.log(`[job ${job.id}] Retrying Gen ${i + 1} without --sref...`);
         try {
           const retryId = await submitMidjourneyJob(job.concepts[i].prompt, { profile: profiles[i].tag });
-          tasks.push({ taskId: retryId, concept: job.concepts[i] });
+          tasks.push({ taskId: retryId, concept: job.concepts[i], usedSref: false });
+          console.log(`[job ${job.id}] Gen ${i + 1} submission retry succeeded`);
         } catch (retryErr) {
-          console.error(`[job ${job.id}] Retry also failed: ${retryErr.message}`);
+          console.error(`[job ${job.id}] Gen ${i + 1} submission retry also failed: ${retryErr.message}`);
         }
       }
     }
@@ -671,27 +705,28 @@ async function generateAllImages(job) {
     tasks.map((t) => pollGridJob(t.taskId))
   );
 
-  console.log(`[job ${job.id}] Grids complete, cropping quadrants...`);
+  console.log(`[job ${job.id}] Grids complete, processing results...`);
 
-  // Retry Gen 3 without --sref if it failed during polling
-  const lastIdx = gridResults.length - 1;
-  if (sref && gridResults[lastIdx] &&
-      (gridResults[lastIdx].status === 'rejected' || !gridResults[lastIdx].value?.imageUrl)) {
-    const failReason = gridResults[lastIdx].status === 'rejected'
-      ? gridResults[lastIdx].reason?.message : 'No image URL returned';
-    console.error(`[job ${job.id}] Gen 3 failed with --sref (${failReason}). Retrying without --sref...`);
-    try {
-      const retryId = await submitMidjourneyJob(
-        tasks[lastIdx].concept.prompt,
-        { profile: profiles[profiles.length - 1].tag }
-      );
-      const retryGrid = await pollGridJob(retryId);
-      gridResults[lastIdx] = { status: 'fulfilled', value: retryGrid };
-      console.log(`[job ${job.id}] Gen 3 retry succeeded`);
-    } catch (retryErr) {
-      console.error(`[job ${job.id}] Gen 3 retry also failed: ${retryErr.message}`);
+  // If any gen that used --sref failed during polling, retry without it
+  for (let i = 0; i < gridResults.length; i++) {
+    const failed = gridResults[i].status === 'rejected' ||
+      (gridResults[i].status === 'fulfilled' && !gridResults[i].value?.imageUrl);
+    if (failed && tasks[i].usedSref) {
+      const failReason = gridResults[i].status === 'rejected'
+        ? gridResults[i].reason?.message : 'No image URL returned';
+      console.error(`[job ${job.id}] Gen ${i + 1} failed with --sref (${failReason}). Retrying without...`);
+      try {
+        const retryId = await submitMidjourneyJob(tasks[i].concept.prompt, { profile: profiles[i].tag });
+        const retryGrid = await pollGridJob(retryId);
+        gridResults[i] = { status: 'fulfilled', value: retryGrid };
+        console.log(`[job ${job.id}] Gen ${i + 1} polling retry succeeded`);
+      } catch (retryErr) {
+        console.error(`[job ${job.id}] Gen ${i + 1} polling retry also failed: ${retryErr.message}`);
+      }
     }
   }
+
+  console.log(`[job ${job.id}] Cropping quadrants...`);
 
   const allImages = [];
 
@@ -1126,6 +1161,7 @@ app.get('/api/sref-image/:filename', (req, res) => {
   }
   const filepath = join(getSrefDir(), safe);
   if (!existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
   res.type('image/jpeg').sendFile(filepath);
 });
 
