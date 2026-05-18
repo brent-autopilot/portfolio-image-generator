@@ -892,89 +892,102 @@
       z-index: 100;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
     .rating-sidebar.hidden { display: none; }
 
     .gen-rating-strip {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 10px 14px;
+      gap: 4px;
+      padding: 8px 10px;
       background: rgba(10, 10, 14, 0.8);
       backdrop-filter: blur(16px);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 14px;
+      border-radius: 12px;
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 8px;
       letter-spacing: 0.5px;
       color: var(--text-dim);
       text-transform: uppercase;
       user-select: none;
       cursor: default;
       transition: border-color 0.2s, background 0.2s;
-      min-width: 120px;
     }
     .gen-rating-strip:hover {
       border-color: rgba(255,255,255,0.18);
       background: rgba(10, 10, 14, 0.9);
     }
-    .gen-rating-strip .strip-top {
+    .gen-rating-strip .strip-header {
+      color: var(--text-mid);
+      font-weight: 700;
+      font-size: 9px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+    }
+    .comp-row {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
+      min-height: 22px;
     }
-    .gen-rating-strip .gen-label {
-      color: var(--text-mid);
-      font-weight: 600;
-      white-space: nowrap;
-    }
-    .gen-rating-strip .gen-components {
-      color: var(--text-dim);
+    .comp-row .comp-label {
+      width: 42px;
+      flex-shrink: 0;
       font-size: 7px;
+      color: var(--text-dim);
+      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .comp-row .comp-value {
+      flex: 1;
+      font-size: 6.5px;
+      color: rgba(255,255,255,0.3);
       white-space: nowrap;
-      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
       cursor: help;
     }
-    .gen-rating-strip .strip-buttons {
+    .comp-row .comp-btns {
       display: flex;
-      gap: 5px;
+      gap: 3px;
+      flex-shrink: 0;
     }
-    .gen-rating-strip .rate-btn {
+    .comp-row .rate-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 26px;
-      height: 26px;
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.03);
       cursor: pointer;
-      font-size: 13px;
+      font-size: 8px;
       line-height: 1;
-      transition: all 0.2s;
-      color: var(--text-dim);
+      transition: all 0.15s;
+      color: rgba(255,255,255,0.25);
     }
-    .gen-rating-strip .rate-btn:hover {
-      border-color: rgba(255,255,255,0.25);
-      background: rgba(255,255,255,0.1);
+    .comp-row .rate-btn:hover {
+      border-color: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
       color: var(--text);
     }
-    .gen-rating-strip .rate-btn.active-up {
+    .comp-row .rate-btn.active-up {
       border-color: var(--pass);
       background: rgba(52, 211, 153, 0.15);
       color: var(--pass);
     }
-    .gen-rating-strip .rate-btn.active-down {
+    .comp-row .rate-btn.active-down {
       border-color: var(--fail);
       background: rgba(248, 113, 113, 0.15);
       color: var(--fail);
     }
-    .gen-rating-strip .rate-btn.active-neutral {
-      border-color: rgba(255,255,255,0.25);
-      background: rgba(255,255,255,0.12);
+    .comp-row .rate-btn.active-neutral {
+      border-color: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
       color: var(--text);
     }
     .gen-rating-strip.expired {
@@ -986,6 +999,7 @@
       color: var(--text-dim);
       font-style: italic;
     }
+    .comp-row.comp-empty { display: none; }
 
     /* Hover-to-highlight: dim/brighten cards by generation */
     .gallery-card.gen-dimmed {
@@ -1862,9 +1876,63 @@
         if (s.classList.contains('expired')) continue;
         s.classList.add('expired');
         if (!s.querySelector('.expired-msg')) {
-          s.querySelector('.gen-label').insertAdjacentHTML('afterend', '<span class="expired-msg">session expired</span>');
+          s.querySelector('.strip-header').insertAdjacentHTML('afterend', '<span class="expired-msg">session expired</span>');
         }
       }
+    }
+
+    function buildCompRow(genIndex, component, label, value) {
+      const row = document.createElement('div');
+      row.className = 'comp-row' + (value ? '' : ' comp-empty');
+      row.innerHTML = `
+        <span class="comp-label">${esc(label)}</span>
+        <span class="comp-value" title="${esc(value || '')}">${esc(value ? (value.length > 25 ? value.slice(0, 22) + '...' : value) : '')}</span>
+        <span class="comp-btns">
+          <button class="rate-btn" data-rating="up" data-comp="${component}" title="Thumbs up">&#x25B2;</button>
+          <button class="rate-btn" data-rating="neutral" data-comp="${component}" title="Neutral">&#x25CF;</button>
+          <button class="rate-btn" data-rating="down" data-comp="${component}" title="Thumbs down">&#x25BC;</button>
+        </span>
+      `;
+
+      const genState = _genRatings[genIndex];
+      const existing = genState && genState[component];
+      if (existing) {
+        const activeBtn = row.querySelector(`.rate-btn[data-rating="${existing}"]`);
+        if (activeBtn) activeBtn.classList.add('active-' + existing);
+      }
+
+      const buttons = row.querySelectorAll('.rate-btn');
+      for (const btn of buttons) {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!_currentJobId) return;
+          const rating = btn.dataset.rating;
+          const prev = (_genRatings[genIndex] || {})[component];
+          if (prev === rating) return;
+          try {
+            const res = await fetch('/api/rate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jobId: _currentJobId, genIndex, component, rating }),
+            });
+            if (res.status === 404) {
+              expireAllStrips();
+              return;
+            }
+            if (!res.ok) return;
+            if (!_genRatings[genIndex]) _genRatings[genIndex] = {};
+            _genRatings[genIndex][component] = rating;
+            for (const b of buttons) {
+              b.classList.remove('active-up', 'active-down', 'active-neutral');
+            }
+            btn.classList.add('active-' + rating);
+          } catch (err) {
+            console.error('Rating error:', err.message);
+          }
+        });
+      }
+
+      return row;
     }
 
     function createRatingStrip(genIndex, componentInfo) {
@@ -1872,26 +1940,14 @@
       strip.className = 'gen-rating-strip';
       strip.dataset.genIndex = genIndex;
 
-      const parts = [componentInfo.style, componentInfo.interpretation, componentInfo.profile].filter(Boolean);
-      const tooltipText = parts.map((p) => p.length > 60 ? p.slice(0, 57) + '...' : p).join(' · ');
+      const header = document.createElement('div');
+      header.className = 'strip-header';
+      header.textContent = `Gen ${genIndex + 1}`;
+      strip.appendChild(header);
 
-      strip.innerHTML = `
-        <div class="strip-top">
-          <span class="gen-label">Gen ${genIndex + 1}</span>
-          <span class="gen-components" title="${esc(tooltipText)}">${esc(tooltipText ? tooltipText.slice(0, 30) + (tooltipText.length > 30 ? '...' : '') : '')}</span>
-        </div>
-        <div class="strip-buttons">
-          <button class="rate-btn" data-rating="up" title="Thumbs up">&#x25B2;</button>
-          <button class="rate-btn" data-rating="neutral" title="Neutral">&#x25CF;</button>
-          <button class="rate-btn" data-rating="down" title="Thumbs down">&#x25BC;</button>
-        </div>
-      `;
-
-      const existing = _genRatings[genIndex];
-      if (existing) {
-        const activeBtn = strip.querySelector(`.rate-btn[data-rating="${existing}"]`);
-        if (activeBtn) activeBtn.classList.add('active-' + existing);
-      }
+      strip.appendChild(buildCompRow(genIndex, 'styles', 'Style', componentInfo.style));
+      strip.appendChild(buildCompRow(genIndex, 'interpretations', 'Interp', componentInfo.interpretation));
+      strip.appendChild(buildCompRow(genIndex, 'srefs', 'Sref', componentInfo.srefName));
 
       strip.addEventListener('mouseenter', () => {
         if (!_galleryContainer) return;
@@ -1912,36 +1968,6 @@
         }
       });
 
-      const buttons = strip.querySelectorAll('.rate-btn');
-      for (const btn of buttons) {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          if (!_currentJobId) return;
-          const rating = btn.dataset.rating;
-          const prev = _genRatings[genIndex];
-          if (prev === rating) return;
-          try {
-            const res = await fetch('/api/rate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jobId: _currentJobId, genIndex, rating }),
-            });
-            if (res.status === 404) {
-              expireAllStrips();
-              return;
-            }
-            if (!res.ok) return;
-            _genRatings[genIndex] = rating;
-            for (const b of buttons) {
-              b.classList.remove('active-up', 'active-down', 'active-neutral');
-            }
-            btn.classList.add('active-' + rating);
-          } catch (err) {
-            console.error('Rating error:', err.message);
-          }
-        });
-      }
-
       _ratingStrips.push(strip);
       return strip;
     }
@@ -1951,8 +1977,11 @@
       ratingSidebar.innerHTML = '';
       _ratingStrips = [];
 
-      if (serverRatings) {
-        _genRatings = { ...serverRatings };
+      if (serverRatings && Object.keys(serverRatings).length > 0) {
+        _genRatings = {};
+        for (const [k, v] of Object.entries(serverRatings)) {
+          _genRatings[k] = typeof v === 'object' && v !== null ? { ...v } : {};
+        }
       }
 
       const genGroups = {};
@@ -1968,7 +1997,7 @@
       for (const gi of genIndices) {
         const group = genGroups[gi];
         const first = group[0] || {};
-        const info = { style: first.style || '', interpretation: first.interpretation || '', profile: first.profileLabel || '' };
+        const info = { style: first.style || '', interpretation: first.interpretation || '', srefName: first.srefName || '' };
         ratingSidebar.appendChild(createRatingStrip(gi, info));
 
         for (const img of group) {

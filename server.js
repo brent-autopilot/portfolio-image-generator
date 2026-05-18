@@ -1067,12 +1067,15 @@ app.post('/api/upscale', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Ratings — rate a generation (thumbs up / neutral / down)
+// Ratings — rate a single component (style / interpretation / sref)
 // ---------------------------------------------------------------------------
 app.post('/api/rate', (req, res) => {
-  const { jobId, genIndex, rating } = req.body;
+  const { jobId, genIndex, component, rating } = req.body;
   if (!['up', 'neutral', 'down'].includes(rating)) {
     return res.status(400).json({ error: 'Rating must be up, neutral, or down' });
+  }
+  if (!['styles', 'interpretations', 'srefs'].includes(component)) {
+    return res.status(400).json({ error: 'Component must be styles, interpretations, or srefs' });
   }
   const gi = parseInt(genIndex, 10);
   if (isNaN(gi) || gi < 0 || gi >= NUM_CONCEPTS) {
@@ -1082,36 +1085,31 @@ app.post('/api/rate', (req, res) => {
   const job = jobs.get(jobId);
   if (!job) return res.status(404).json({ error: 'Job not found or session expired' });
 
-  if (!job.genRatings) job.genRatings = {};
-  const prevRating = job.genRatings[gi];
-
   const concept = job.concepts?.[gi];
-  const style = concept?.style || null;
-  const interpretation = concept?.interpretation || null;
-  const profileTag = job.profileTags?.[gi] || null;
-  const srefName = job.actualSrefs?.[gi] || null;
+  let key = null;
+  if (component === 'styles') key = concept?.style || null;
+  else if (component === 'interpretations') key = concept?.interpretation || null;
+  else if (component === 'srefs') key = job.actualSrefs?.[gi] || null;
 
-  const components = [];
-  if (style) components.push({ category: 'styles', key: style });
-  if (interpretation) components.push({ category: 'interpretations', key: interpretation });
-  if (profileTag) components.push({ category: 'profiles', key: profileTag });
-  if (srefName) components.push({ category: 'srefs', key: srefName });
+  if (!key) return res.status(400).json({ error: 'Component not available for this generation' });
+
+  if (!job.genRatings) job.genRatings = {};
+  if (!job.genRatings[gi]) job.genRatings[gi] = {};
+  const prevRating = job.genRatings[gi][component];
 
   const ratings = loadRatings();
-  for (const c of components) {
-    if (!ratings[c.category]) ratings[c.category] = {};
-    if (!ratings[c.category][c.key]) ratings[c.category][c.key] = { up: 0, down: 0, neutral: 0 };
-    if (prevRating) {
-      ratings[c.category][c.key][prevRating] = Math.max(0, (ratings[c.category][c.key][prevRating] || 0) - 1);
-    }
-    ratings[c.category][c.key][rating] = (ratings[c.category][c.key][rating] || 0) + 1;
+  if (!ratings[component]) ratings[component] = {};
+  if (!ratings[component][key]) ratings[component][key] = { up: 0, down: 0, neutral: 0 };
+  if (prevRating) {
+    ratings[component][key][prevRating] = Math.max(0, (ratings[component][key][prevRating] || 0) - 1);
   }
+  ratings[component][key][rating] = (ratings[component][key][rating] || 0) + 1;
   saveRatings(ratings);
 
-  job.genRatings[gi] = rating;
-  console.log(`[job ${jobId}] Rated Gen ${gi + 1}: ${rating} (prev: ${prevRating || 'none'}) — ${components.length} components updated`);
+  job.genRatings[gi][component] = rating;
+  console.log(`[job ${jobId}] Gen ${gi + 1} ${component}: ${rating} (prev: ${prevRating || 'none'}) key="${key.slice(0, 40)}"`);
 
-  res.json({ ok: true, genIndex: gi, rating, prevRating: prevRating || null });
+  res.json({ ok: true, genIndex: gi, component, rating, prevRating: prevRating || null });
 });
 
 app.get('/api/banks', (_req, res) => {
