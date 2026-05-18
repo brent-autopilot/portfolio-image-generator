@@ -181,6 +181,59 @@
       background: rgba(52, 211, 153, 0.06);
     }
     .empty-msg { color: var(--text-dim); font-size: 13px; padding: 30px 0; text-align: center; }
+
+    /* Ratings Analytics */
+    .ratings-tabs {
+      display: flex; gap: 4px; margin-bottom: 16px;
+    }
+    .ratings-tab {
+      padding: 6px 14px; border-radius: 8px; font-size: 11px; font-weight: 600;
+      font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.5px;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      color: var(--text-dim); cursor: pointer; transition: all 0.2s;
+    }
+    .ratings-tab:hover { border-color: rgba(255,255,255,0.15); color: var(--text-mid); }
+    .ratings-tab.active {
+      background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2);
+      color: var(--text);
+    }
+    .rating-list { display: flex; flex-direction: column; gap: 3px; }
+    .rating-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 14px; border-radius: 8px;
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03);
+      border-left: 3px solid transparent;
+    }
+    .rating-row.rating-top { border-left-color: rgba(52, 211, 153, 0.5); }
+    .rating-row.rating-bottom { border-left-color: rgba(248, 113, 113, 0.35); }
+    .rating-rank {
+      font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+      width: 20px; text-align: right; flex-shrink: 0;
+    }
+    .rating-key {
+      flex: 1; font-size: 12px; color: var(--text); min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .rating-votes {
+      display: flex; gap: 8px; font-family: var(--mono); font-size: 10px;
+      flex-shrink: 0;
+    }
+    .rating-votes .v-up { color: var(--pass); }
+    .rating-votes .v-down { color: var(--fail); }
+    .rating-votes .v-neutral { color: var(--text-dim); }
+    .rating-bar-wrap {
+      width: 80px; height: 6px; border-radius: 3px; flex-shrink: 0;
+      background: rgba(255,255,255,0.04); overflow: hidden;
+    }
+    .rating-bar {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, rgba(52,211,153,0.6), rgba(52,211,153,0.3));
+      transition: width 0.4s ease-out;
+    }
+    .rating-score {
+      font-family: var(--mono); font-size: 10px; color: var(--text-mid);
+      width: 28px; text-align: right; flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -227,6 +280,23 @@
       <div id="sref-status" class="status-msg hidden"></div>
       <div id="sref-grid" class="sref-grid"></div>
     </div>
+
+    <!-- Ratings Analytics -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Ratings Analytics</div>
+      </div>
+      <div class="section-desc">Component rankings based on generation feedback. Higher score = more likely to be selected.</div>
+      <div class="ratings-tabs">
+        <button class="ratings-tab active" data-tab="styles">Styles</button>
+        <button class="ratings-tab" data-tab="interpretations">Interpretations</button>
+        <button class="ratings-tab" data-tab="profiles">Profiles</button>
+        <button class="ratings-tab" data-tab="srefs">Style Refs</button>
+      </div>
+      <div id="ratings-content" class="rating-list">
+        <div class="empty-msg">Loading...</div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -250,6 +320,7 @@
       mainEl.style.display = '';
       loadProfiles();
       loadSrefs();
+      loadRatings();
     }
 
     async function doLogin() {
@@ -501,6 +572,61 @@
       } catch {
         srefGrid.innerHTML = '<div class="empty-msg">Failed to load</div>';
       }
+    }
+
+    // --- Ratings Analytics ---
+    const ratingsContent = document.getElementById('ratings-content');
+    const ratingsTabs = document.querySelectorAll('.ratings-tab');
+    let _ratingsData = null;
+    let _activeRatingsTab = 'styles';
+
+    for (const tab of ratingsTabs) {
+      tab.addEventListener('click', () => {
+        _activeRatingsTab = tab.dataset.tab;
+        for (const t of ratingsTabs) t.classList.toggle('active', t === tab);
+        renderRatingsTab();
+      });
+    }
+
+    async function loadRatings() {
+      try {
+        const res = await fetch('/api/settings/ratings');
+        if (res.status === 401) { location.reload(); return; }
+        _ratingsData = await res.json();
+        renderRatingsTab();
+      } catch {
+        ratingsContent.innerHTML = '<div class="empty-msg">Failed to load ratings</div>';
+      }
+    }
+
+    function renderRatingsTab() {
+      if (!_ratingsData) return;
+      const items = _ratingsData[_activeRatingsTab] || [];
+      if (items.length === 0) {
+        ratingsContent.innerHTML = '<div class="empty-msg">No ratings yet</div>';
+        return;
+      }
+      const maxScore = Math.max(...items.map((r) => r.score), 1);
+      const topThreshold = Math.ceil(items.length * 0.25);
+      const bottomStart = items.length - Math.ceil(items.length * 0.25);
+      ratingsContent.innerHTML = items.map((r, i) => {
+        const barPct = Math.round((r.score / maxScore) * 100);
+        const label = _activeRatingsTab === 'profiles'
+          ? r.key.replace('--profile ', '')
+          : r.key;
+        const tier = i < topThreshold ? 'rating-top' : (i >= bottomStart && items.length > 2 ? 'rating-bottom' : '');
+        return `<div class="rating-row ${tier}">
+          <span class="rating-rank">${i + 1}</span>
+          <span class="rating-key" title="${esc(r.key)}">${esc(label)}</span>
+          <span class="rating-votes">
+            <span class="v-up">&#x25B2;${r.up}</span>
+            <span class="v-down">&#x25BC;${r.down}</span>
+            <span class="v-neutral">&#x25CF;${r.neutral}</span>
+          </span>
+          <div class="rating-bar-wrap"><div class="rating-bar" style="width:${barPct}%"></div></div>
+          <span class="rating-score">${r.score}</span>
+        </div>`;
+      }).join('');
     }
   </script>
 </body>

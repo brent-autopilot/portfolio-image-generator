@@ -883,6 +883,86 @@
       opacity: 0.7;
       filter: grayscale(0.3);
     }
+    /* Generation rating strip — sits between generation groups */
+    .gen-rating-strip {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 50;
+      padding: 6px 14px;
+      background: rgba(10, 10, 14, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .gen-rating-strip .gen-label {
+      color: var(--text-mid);
+      font-weight: 600;
+      margin-right: 2px;
+    }
+    .gen-rating-strip .gen-components {
+      color: var(--text-dim);
+      font-size: 7px;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: help;
+    }
+    .gen-rating-strip .rate-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      transition: all 0.2s;
+      color: var(--text-dim);
+    }
+    .gen-rating-strip .rate-btn:hover {
+      border-color: rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.1);
+      color: var(--text);
+    }
+    .gen-rating-strip .rate-btn.active-up {
+      border-color: var(--pass);
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--pass);
+    }
+    .gen-rating-strip .rate-btn.active-down {
+      border-color: var(--fail);
+      background: rgba(248, 113, 113, 0.15);
+      color: var(--fail);
+    }
+    .gen-rating-strip .rate-btn.active-neutral {
+      border-color: rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.12);
+      color: var(--text);
+    }
+    .gen-rating-strip.expired {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+    .gen-rating-strip .expired-msg {
+      font-size: 7px;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
     @keyframes galleryFadeIn {
       from { opacity: 0; }
       to { opacity: 1; }
@@ -1544,6 +1624,7 @@
     function resetUI() {
       cardCounter = 0;
       _currentJobId = null;
+      _genRatings = {};
       pipelineSection.classList.add('hidden');
       pipelineSection.classList.remove('processing');
       gallerySection.classList.add('hidden');
@@ -1722,14 +1803,123 @@
       return card;
     }
 
+    let _genRatings = {};
+    let _ratingStrips = [];
+
+    function expireAllStrips() {
+      for (const s of _ratingStrips) {
+        if (s.classList.contains('expired')) continue;
+        s.classList.add('expired');
+        if (!s.querySelector('.expired-msg')) {
+          s.querySelector('.gen-label').insertAdjacentHTML('afterend', '<span class="expired-msg">session expired</span>');
+        }
+      }
+    }
+
+    function createRatingStrip(genIndex, topOffset, componentInfo) {
+      const strip = document.createElement('div');
+      strip.className = 'gen-rating-strip';
+      strip.dataset.noParallax = '1';
+      strip.style.top = `${topOffset}px`;
+      strip.dataset.genIndex = genIndex;
+
+      const parts = [componentInfo.style, componentInfo.interpretation, componentInfo.profile].filter(Boolean);
+      const tooltipText = parts.map((p) => p.length > 60 ? p.slice(0, 57) + '...' : p).join(' · ');
+
+      strip.innerHTML = `
+        <span class="gen-label">Gen ${genIndex + 1}</span>
+        <span class="gen-components" title="${esc(tooltipText)}">${esc(tooltipText ? tooltipText.slice(0, 40) + (tooltipText.length > 40 ? '...' : '') : '')}</span>
+        <button class="rate-btn" data-rating="up" title="Thumbs up">&#x25B2;</button>
+        <button class="rate-btn" data-rating="neutral" title="Neutral">&#x25CF;</button>
+        <button class="rate-btn" data-rating="down" title="Thumbs down">&#x25BC;</button>
+      `;
+
+      const existing = _genRatings[genIndex];
+      if (existing) {
+        const activeBtn = strip.querySelector(`.rate-btn[data-rating="${existing}"]`);
+        if (activeBtn) activeBtn.classList.add('active-' + existing);
+      }
+
+      const buttons = strip.querySelectorAll('.rate-btn');
+      for (const btn of buttons) {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!_currentJobId) return;
+          const rating = btn.dataset.rating;
+          const prev = _genRatings[genIndex];
+          if (prev === rating) return;
+          try {
+            const res = await fetch('/api/rate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jobId: _currentJobId, genIndex, rating }),
+            });
+            if (res.status === 404) {
+              expireAllStrips();
+              return;
+            }
+            if (!res.ok) return;
+            _genRatings[genIndex] = rating;
+            for (const b of buttons) {
+              b.classList.remove('active-up', 'active-down', 'active-neutral');
+            }
+            btn.classList.add('active-' + rating);
+          } catch (err) {
+            console.error('Rating error:', err.message);
+          }
+        });
+      }
+
+      _ratingStrips.push(strip);
+      return strip;
+    }
+
+    function renderGalleryWithRatings(container, images, serverRatings) {
+      container.innerHTML = '';
+      _ratingStrips = [];
+
+      if (serverRatings) {
+        _genRatings = { ...serverRatings };
+      }
+
+      const genGroups = {};
+      for (const img of images) {
+        const gi = img.genIndex != null ? img.genIndex : 0;
+        if (!genGroups[gi]) genGroups[gi] = [];
+        genGroups[gi].push(img);
+      }
+
+      let globalIndex = 0;
+      const genIndices = Object.keys(genGroups).map(Number).sort((a, b) => a - b);
+
+      for (const gi of genIndices) {
+        const group = genGroups[gi];
+        const firstSlot = GALLERY_SLOTS[globalIndex % GALLERY_SLOTS.length];
+        const stripY = firstSlot.y - 30;
+        const first = group[0] || {};
+        const info = { style: first.style || '', interpretation: first.interpretation || '', profile: first.profileLabel || '' };
+        container.appendChild(createRatingStrip(gi, stripY, info));
+
+        for (const img of group) {
+          container.appendChild(renderGalleryCard(img, globalIndex));
+          globalIndex++;
+        }
+      }
+
+      initGalleryParallax(container);
+    }
+
     let _galleryContainer = null;
+    function isParallaxCard(el) { return !el.dataset.noParallax; }
     function initGalleryParallax(container) {
       _galleryContainer = container;
 
       for (const card of container.children) {
+        if (!isParallaxCard(card)) continue;
         card.addEventListener('mouseenter', () => {
           const hoveredDepth = parseFloat(card.dataset.depth) || 0.5;
           for (const other of container.children) {
+            if (!isParallaxCard(other)) continue;
             if (other === card) {
               other.style.filter = 'blur(0px)';
               continue;
@@ -1742,6 +1932,7 @@
         });
         card.addEventListener('mouseleave', () => {
           for (const other of container.children) {
+            if (!isParallaxCard(other)) continue;
             other.style.filter = 'blur(0px)';
           }
         });
@@ -1753,6 +1944,7 @@
       const mx = (e.clientX / window.innerWidth - 0.5) * 2;
       const my = (e.clientY / window.innerHeight - 0.5) * 2;
       for (const card of _galleryContainer.children) {
+        if (!isParallaxCard(card)) continue;
         const depth = parseFloat(card.dataset.depth) || 0.5;
         const baseRot = parseFloat(card.dataset.baseRotation) || 0;
         const tx = mx * depth * 50;
@@ -1862,10 +2054,7 @@
         if ((status.stage === 'images_ready' || status.stage === 'qc_check') && gallerySection.classList.contains('hidden')) {
           if (status.rawImages?.length > 0) {
             gallerySection.classList.remove('hidden');
-            status.rawImages.forEach((img, i) => {
-              galleryScatter.appendChild(renderGalleryCard({ ...img, verdict: null }, i));
-            });
-            initGalleryParallax(galleryScatter);
+            renderGalleryWithRatings(galleryScatter, status.rawImages.map((img) => ({ ...img, verdict: null })), status.genRatings);
           }
         }
 
@@ -1887,13 +2076,9 @@
             ...(results.rejectedImages || []),
           ];
 
-          galleryScatter.innerHTML = '';
           if (allImages.length > 0) {
             gallerySection.classList.remove('hidden');
-            allImages.forEach((img, i) => {
-              galleryScatter.appendChild(renderGalleryCard(img, i));
-            });
-            initGalleryParallax(galleryScatter);
+            renderGalleryWithRatings(galleryScatter, allImages, results.genRatings);
           }
 
           if (!results.approvedImages?.length && results.rejectedImages?.length) {

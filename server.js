@@ -160,13 +160,7 @@ function loadStyleBank() {
 const STYLE_BANK = loadStyleBank();
 
 function pickRandomStyles(count) {
-  const pool = [...STYLE_BANK];
-  const picks = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picks.push(pool.splice(idx, 1)[0]);
-  }
-  return picks;
+  return weightedRandomPick(STYLE_BANK, (s) => s, 'styles', count);
 }
 
 function loadInterpretationBank() {
@@ -176,13 +170,7 @@ function loadInterpretationBank() {
 const INTERPRETATION_BANK = loadInterpretationBank();
 
 function pickRandomInterpretations(count) {
-  const pool = [...INTERPRETATION_BANK];
-  const picks = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picks.push(pool.splice(idx, 1)[0]);
-  }
-  return picks;
+  return weightedRandomPick(INTERPRETATION_BANK, (s) => s, 'interpretations', count);
 }
 
 // ---------------------------------------------------------------------------
@@ -227,16 +215,7 @@ function saveProfileBank(entries) {
 let PROFILE_BANK = loadProfileBank();
 
 function pickRandomProfiles(count) {
-  const pool = [...PROFILE_BANK];
-  const picks = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picks.push(pool.splice(idx, 1)[0]);
-  }
-  while (picks.length < count) {
-    picks.push(PROFILE_BANK[Math.floor(Math.random() * PROFILE_BANK.length)]);
-  }
-  return picks;
+  return weightedRandomPick(PROFILE_BANK, (p) => p.tag, 'profiles', count);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,15 +260,7 @@ function saveSrefBank(entries) {
 function pickRandomSrefs(count, baseUrl) {
   const bank = loadSrefBank();
   if (bank.length === 0) return [];
-  const pool = [...bank];
-  const picks = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picks.push(pool.splice(idx, 1)[0]);
-  }
-  while (picks.length < count) {
-    picks.push(bank[Math.floor(Math.random() * bank.length)]);
-  }
+  const picks = weightedRandomPick(bank, (p) => p.name, 'srefs', count);
   return picks.map((p) => ({ name: p.name, url: `${baseUrl}/api/sref-image/${p.filename}` }));
 }
 
@@ -310,6 +281,72 @@ async function verifySrefUrl(url) {
     console.error(`[sref-verify] Failed to reach ${url}: ${err.message}`);
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Ratings — weighted selection based on thumbs up/neutral/down feedback
+// ---------------------------------------------------------------------------
+const RATINGS_FILE = join(ARCHIVE_DIR, 'ratings.json');
+const DEFAULT_RATINGS = { styles: {}, interpretations: {}, profiles: {}, srefs: {} };
+let _ratingsCache = null;
+
+function loadRatings() {
+  if (_ratingsCache) return _ratingsCache;
+  try {
+    const parsed = JSON.parse(readFileSync(RATINGS_FILE, 'utf-8'));
+    _ratingsCache = { ...DEFAULT_RATINGS, ...parsed };
+  } catch {
+    _ratingsCache = { ...DEFAULT_RATINGS };
+  }
+  return _ratingsCache;
+}
+
+function saveRatings(data) {
+  _ratingsCache = data;
+  writeFileSync(RATINGS_FILE, JSON.stringify(data, null, 2));
+}
+
+function getRatingScore(category, key) {
+  const ratings = loadRatings();
+  const entry = ratings[category]?.[key];
+  if (!entry) return 10;
+  return Math.max(1, 10 + (entry.up || 0) * 2 - (entry.down || 0) * 3);
+}
+
+function incrementRating(category, key, rating) {
+  const ratings = loadRatings();
+  if (!ratings[category]) ratings[category] = {};
+  if (!ratings[category][key]) ratings[category][key] = { up: 0, down: 0, neutral: 0 };
+  ratings[category][key][rating] = (ratings[category][key][rating] || 0) + 1;
+  saveRatings(ratings);
+}
+
+function decrementRating(category, key, rating) {
+  const ratings = loadRatings();
+  if (!ratings[category]?.[key]) return;
+  ratings[category][key][rating] = Math.max(0, (ratings[category][key][rating] || 0) - 1);
+  saveRatings(ratings);
+}
+
+function weightedRandomPick(pool, getKey, category, count) {
+  const available = [...pool];
+  const picks = [];
+  for (let i = 0; i < count && available.length > 0; i++) {
+    const scored = available.map((item, idx) => ({ item, idx, score: getRatingScore(category, getKey(item)) }));
+    const total = scored.reduce((sum, s) => sum + s.score, 0);
+    let r = Math.random() * total;
+    let winner = scored[scored.length - 1];
+    for (const s of scored) {
+      r -= s.score;
+      if (r <= 0) { winner = s; break; }
+    }
+    picks.push(winner.item);
+    available.splice(winner.idx, 1);
+  }
+  while (picks.length < count && pool.length > 0) {
+    picks.push(pool[Math.floor(Math.random() * pool.length)]);
+  }
+  return picks;
 }
 
 function loadClogPrompt() {
@@ -671,6 +708,8 @@ async function generateAllImages(job) {
 
   job.assignedProfiles = profiles.map((p) => p.label);
   job.assignedSrefs = srefs.filter(Boolean).map((s) => s.name);
+  job.actualSrefs = [null, ...srefs.map((s) => s ? s.name : null)];
+  job.profileTags = profiles.map((p) => p.tag);
   console.log(`[job ${job.id}] Profiles: ${profiles.map((p) => p.label).join(', ')}`);
 
   // Gen 1 (i=0): profile only — Gen 2 (i=1): profile + srefs[0] — Gen 3 (i=2): profile + srefs[1]
@@ -702,6 +741,7 @@ async function generateAllImages(job) {
         try {
           const retryId = await submitMidjourneyJob(job.concepts[i].prompt, { profile: profiles[i].tag });
           tasks.push({ taskId: retryId, concept: job.concepts[i], genIndex: i, usedSref: false });
+          job.actualSrefs[i] = null;
           console.log(`[job ${job.id}] Gen ${i + 1} submission retry succeeded`);
         } catch (retryErr) {
           console.error(`[job ${job.id}] Gen ${i + 1} submission retry also failed: ${retryErr.message}`);
@@ -735,6 +775,8 @@ async function generateAllImages(job) {
         const retryId = await submitMidjourneyJob(tasks[i].concept.prompt, { profile: profiles[gi].tag });
         const retryGrid = await pollGridJob(retryId);
         gridResults[i] = { status: 'fulfilled', value: retryGrid };
+        tasks[i].usedSref = false;
+        job.actualSrefs[gi] = null;
         console.log(`[job ${job.id}] Gen ${gi + 1} polling retry succeeded`);
       } catch (retryErr) {
         console.error(`[job ${job.id}] Gen ${gi + 1} polling retry also failed: ${retryErr.message}`);
@@ -761,6 +803,7 @@ async function generateAllImages(job) {
     }
 
     try {
+      const gi = tasks[i].genIndex;
       const quadrantFiles = await cropGridToQuadrants(imageUrl, job.id, i);
       for (let q = 0; q < quadrantFiles.length; q++) {
         allImages.push({
@@ -775,6 +818,10 @@ async function generateAllImages(job) {
           prompt: concept.prompt,
           style: concept.style || null,
           interpretation: concept.interpretation || null,
+          genIndex: gi,
+          profile: profiles[gi]?.tag || null,
+          profileLabel: profiles[gi]?.label || null,
+          srefName: tasks[i].usedSref ? (job.actualSrefs[gi] || null) : null,
         });
       }
     } catch (err) {
@@ -941,6 +988,10 @@ app.get('/api/status/:jobId', (req, res) => {
     useStyleBank: job.useStyleBank,
     assignedStyles: job.assignedStyles,
     assignedInterpretations: job.assignedInterpretations,
+    assignedProfiles: job.assignedProfiles,
+    actualSrefs: job.actualSrefs,
+    profileTags: job.profileTags,
+    genRatings: job.genRatings || {},
     concepts: job.concepts,
     mjTaskIds: job.mjTaskIds,
     rawImages: job.rawImages,
@@ -963,6 +1014,10 @@ app.get('/api/results/:jobId', (req, res) => {
     useStyleBank: job.useStyleBank,
     assignedStyles: job.assignedStyles,
     assignedInterpretations: job.assignedInterpretations,
+    assignedProfiles: job.assignedProfiles,
+    actualSrefs: job.actualSrefs,
+    profileTags: job.profileTags,
+    genRatings: job.genRatings || {},
     concepts: job.concepts,
     approvedImages: job.approvedImages,
     rejectedImages: job.rejectedImages,
@@ -1009,6 +1064,54 @@ app.post('/api/upscale', async (req, res) => {
     console.error(`[job ${jobId}] Upscale failed for image ${idx}:`, err.message);
     res.status(500).json({ error: err.message || 'Upscale failed' });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Ratings — rate a generation (thumbs up / neutral / down)
+// ---------------------------------------------------------------------------
+app.post('/api/rate', (req, res) => {
+  const { jobId, genIndex, rating } = req.body;
+  if (!['up', 'neutral', 'down'].includes(rating)) {
+    return res.status(400).json({ error: 'Rating must be up, neutral, or down' });
+  }
+  const gi = parseInt(genIndex, 10);
+  if (isNaN(gi) || gi < 0 || gi >= NUM_CONCEPTS) {
+    return res.status(400).json({ error: 'Invalid genIndex' });
+  }
+
+  const job = jobs.get(jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found or session expired' });
+
+  if (!job.genRatings) job.genRatings = {};
+  const prevRating = job.genRatings[gi];
+
+  const concept = job.concepts?.[gi];
+  const style = concept?.style || null;
+  const interpretation = concept?.interpretation || null;
+  const profileTag = job.profileTags?.[gi] || null;
+  const srefName = job.actualSrefs?.[gi] || null;
+
+  const components = [];
+  if (style) components.push({ category: 'styles', key: style });
+  if (interpretation) components.push({ category: 'interpretations', key: interpretation });
+  if (profileTag) components.push({ category: 'profiles', key: profileTag });
+  if (srefName) components.push({ category: 'srefs', key: srefName });
+
+  const ratings = loadRatings();
+  for (const c of components) {
+    if (!ratings[c.category]) ratings[c.category] = {};
+    if (!ratings[c.category][c.key]) ratings[c.category][c.key] = { up: 0, down: 0, neutral: 0 };
+    if (prevRating) {
+      ratings[c.category][c.key][prevRating] = Math.max(0, (ratings[c.category][c.key][prevRating] || 0) - 1);
+    }
+    ratings[c.category][c.key][rating] = (ratings[c.category][c.key][rating] || 0) + 1;
+  }
+  saveRatings(ratings);
+
+  job.genRatings[gi] = rating;
+  console.log(`[job ${jobId}] Rated Gen ${gi + 1}: ${rating} (prev: ${prevRating || 'none'}) — ${components.length} components updated`);
+
+  res.json({ ok: true, genIndex: gi, rating, prevRating: prevRating || null });
 });
 
 app.get('/api/banks', (_req, res) => {
@@ -1166,6 +1269,36 @@ app.post('/api/settings/sref-from-url', async (req, res) => {
     console.error('[sref-from-url] Failed:', err.message);
     res.status(500).json({ error: err.message || 'Failed to fetch image from URL' });
   }
+});
+
+// --- Ratings analytics ---
+app.get('/api/settings/ratings', (_req, res) => {
+  const ratings = loadRatings();
+  const activeProfiles = new Set(PROFILE_BANK.map((p) => p.tag));
+  const activeSrefs = new Set(loadSrefBank().map((s) => s.name));
+  const activeStyles = new Set(STYLE_BANK);
+  const activeInterps = new Set(INTERPRETATION_BANK);
+
+  function buildRanked(category, activeSet) {
+    const entries = ratings[category] || {};
+    return Object.entries(entries)
+      .filter(([key, v]) => activeSet.has(key) && ((v.up || 0) + (v.down || 0) + (v.neutral || 0) > 0))
+      .map(([key, v]) => ({
+        key,
+        up: v.up || 0,
+        down: v.down || 0,
+        neutral: v.neutral || 0,
+        score: Math.max(1, 10 + (v.up || 0) * 2 - (v.down || 0) * 3),
+      }))
+      .sort((a, b) => b.score - a.score || b.up - a.up);
+  }
+
+  res.json({
+    styles: buildRanked('styles', activeStyles),
+    interpretations: buildRanked('interpretations', activeInterps),
+    profiles: buildRanked('profiles', activeProfiles),
+    srefs: buildRanked('srefs', activeSrefs),
+  });
 });
 
 // --- Sref image serve (public — Midjourney needs access) ---
