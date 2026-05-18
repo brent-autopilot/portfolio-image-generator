@@ -1,56 +1,31 @@
 # Interpretation Bank
 
-<!-- One interpretation angle per line. One is randomly assigned per concept to diversify conceptual direction. -->
+<!-- One interpretation angle per line. One is randomly assigned per concept to diversify conceptual direction. 25 entries. -->
 
 ---
 
-show the fund's subject in a state of tension or anticipation
-interpret the fund name as a physical place or environment
 find the tension or conflict implied by the thesis
-depict the outcome, not the process
-treat the fund as an origin story — show the moment before
-zoom into a single material detail that symbolizes the whole
-interpret the thesis through nature or biology
 show scale — make something impossibly large or impossibly small
-find the humor or irony in the fund name
-depict the opposite of the thesis, then invert the frame
-interpret through architecture or built environment
-show the fund's subject at the moment of greatest impact or consequence
-treat it as a still from a film — what scene is this?
-interpret through time — show decay, growth, or transformation
-find the most abstract single object that captures the thesis
 show the thesis as a force of nature — wind, gravity, pressure, heat
-show the fund's subject being shaped, crafted, or worked by skilled hands or tools
-depict the thesis as a journey — where does it start, where does it end?
-show what the fund protects against, not what it pursues
-show the fund's subject undergoing a chemical or alchemical transformation
-find the quietest possible version of the thesis
-show the thesis at planetary or cosmic scale
-show the fund's subject in its simplest, most elemental form
-depict the fund as a tool or instrument — what does it build?
-show the thesis through water — currents, tides, pressure, depth
-interpret as a scientific experiment or laboratory observation
-find the most violent or explosive moment implied by the thesis
-depict the thesis as a balance or imbalance between two forces
-show the fund's subject as if it were alive — breathing, pulsing, or growing
-show the thesis as a texture you could touch
+zoom into a single material detail that symbolizes the whole
+interpret the fund name as a physical place or environment
+treat it as a still from a film — what scene is this?
 interpret through industry — factories, furnaces, assembly lines
-depict the thesis as seen from above, looking down
-find the loneliest image the thesis implies
-show the fund's subject under extreme stress or competition
-show the thesis as a single decisive action or moment of contact
-depict what happens the second after the thesis succeeds
-interpret through weather — storms, calm, pressure systems
-find the oldest version of the thesis — how would it look centuries ago
-show the thesis as a shadow, reflection, or afterimage
-interpret through glass, transparency, or refraction
-depict the thesis as a collision between two objects
+show the fund's subject as if it were alive — breathing, pulsing, or growing
+show the thesis at planetary or cosmic scale
+depict the thesis as a balance or imbalance between two forces
+interpret through time — show decay, growth, or transformation
+show the fund's subject in its simplest, most elemental form
 find the most luxurious or precious material the thesis implies
-interpret through machinery or engineering — gears, levers, systems
-show the thesis from the perspective of something very small
-depict the thesis as an act of repair or restoration
-interpret through fire, combustion, or light emission
-show the thesis as a border, threshold, or doorway
-interpret through gravity — falling, floating, orbiting, anchoring
-depict the thesis as something being measured or weighed
-find the fastest version of the thesis — show velocity and blur
+show the fund's subject in a state of tension or anticipation
+show the thesis through water — currents, tides, pressure, depth
+show the thesis in its final, perfected state
+depict the fund as a tool or instrument — what does it build?
+show what the fund protects against, not what it pursues
+show the fund's thesis as a structure being built or rising
+show the fund's thesis as something rare, scarce, or hard to access
+show the fund's thesis as a network, web, or interconnected system
+show the fund's thesis as something being forged, tempered, or refined
+show the fund's thesis in motion — velocity, momentum, or acceleration without losing clarity
+show the fund's thesis at the moment of breakthrough or emergence
+show the fund's thesis outperforming, leading, or standing apart from the rest

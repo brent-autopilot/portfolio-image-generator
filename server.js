@@ -278,11 +278,19 @@ function saveSrefBank(entries) {
   writeFileSync(getSrefBankFile(), JSON.stringify(entries, null, 2));
 }
 
-function pickRandomSref(baseUrl) {
+function pickRandomSrefs(count, baseUrl) {
   const bank = loadSrefBank();
-  if (bank.length === 0) return null;
-  const pick = bank[Math.floor(Math.random() * bank.length)];
-  return { name: pick.name, url: `${baseUrl}/api/sref-image/${pick.filename}` };
+  if (bank.length === 0) return [];
+  const pool = [...bank];
+  const picks = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picks.push(pool.splice(idx, 1)[0]);
+  }
+  while (picks.length < count) {
+    picks.push(bank[Math.floor(Math.random() * bank.length)]);
+  }
+  return picks.map((p) => ({ name: p.name, url: `${baseUrl}/api/sref-image/${p.filename}` }));
 }
 
 async function verifySrefUrl(url) {
@@ -384,36 +392,36 @@ async function generateThemes(job) {
   let extraReturnFields = '';
 
   if (job.useStyleBank) {
-    const styles = job.manualStyle
-      ? Array(NUM_CONCEPTS).fill(job.manualStyle)
-      : pickRandomStyles(NUM_CONCEPTS);
+    const style1 = job.manualStyle || pickRandomStyles(1)[0];
     const interpretations = job.manualInterpretation
       ? Array(NUM_CONCEPTS).fill(job.manualInterpretation)
       : pickRandomInterpretations(NUM_CONCEPTS);
-    job.assignedStyles = styles;
+    job.assignedStyles = [style1, null, null];
     job.assignedInterpretations = interpretations;
-    console.log(`[job ${job.id}] Assigned styles:`, styles);
+    console.log(`[job ${job.id}] Assigned style (Concept 1 only):`, style1);
     console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
 
-    const directives = styles
-      .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} interpretation: "${interpretations[i]}"`)
-      .join('\n');
+    const directives = [
+      `  Concept 1 style: "${style1}"\n  Concept 1 interpretation: "${interpretations[0]}"`,
+      `  Concept 2 interpretation: "${interpretations[1]}"`,
+      `  Concept 3 interpretation: "${interpretations[2]}"`,
+    ].join('\n');
 
-    directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style AND a mandatory interpretation angle.
+    directivesParagraph = `\n\nConcept 1 has a mandatory visual style AND interpretation angle.
+Concepts 2 and 3 have only an interpretation angle — their visual style will be controlled by a Midjourney style reference image, so do NOT describe any artistic medium, texture, or rendering technique in their prompts. Focus purely on the subject matter and scene.
 
 Style defines the artistic treatment — the medium, technique, or rendering approach.
 Interpretation defines the creative angle — how to THINK about the fund thesis when choosing what to depict.
 
-You MUST use BOTH for each concept:
-
 ${directives}
 
 CRITICAL RULES:
-- The style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
-- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back. Example: for a mortgage fund, "interpret through architecture" should show mortgage-related architecture (foreclosed house, bank vault), not unrelated buildings.
+- For Concept 1: the style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
+- For Concepts 2 and 3: do NOT include any style/medium/texture language — only describe WHAT to depict, not how it should look. A visual style will be applied separately.
+- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back.
 - The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
 
-    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
+    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly, or null if none was assigned)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
   } else {
     console.log(`[job ${job.id}] Style bank disabled`);
   }
@@ -640,33 +648,42 @@ async function generateAllImages(job) {
   const rpd = process.env.RAILWAY_PUBLIC_DOMAIN;
   const host = rpd || process.env.HOST || `localhost:${PORT}`;
   const baseUrl = rpd ? `https://${host}` : `http://${host}`;
-  const srefCandidate = pickRandomSref(baseUrl);
 
-  let sref = null;
-  if (srefCandidate) {
+  // Pick 2 distinct srefs for Gen 2 and Gen 3; verify each is reachable
+  const SREF_COUNT = 2;
+  const srefCandidates = pickRandomSrefs(SREF_COUNT, baseUrl);
+  const srefs = []; // verified srefs, indexed 0 → Gen 2, 1 → Gen 3
+  if (srefCandidates.length > 0) {
     if (!rpd) {
       console.warn(`[job ${job.id}] RAILWAY_PUBLIC_DOMAIN not set — skipping --sref (Midjourney can't reach localhost)`);
     } else {
-      const reachable = await verifySrefUrl(srefCandidate.url);
-      if (reachable) {
-        sref = srefCandidate;
-        console.log(`[job ${job.id}] Sref verified OK: "${sref.name}" → ${sref.url}`);
-      } else {
-        console.warn(`[job ${job.id}] Sref URL not reachable, proceeding without --sref`);
+      for (let s = 0; s < srefCandidates.length; s++) {
+        const reachable = await verifySrefUrl(srefCandidates[s].url);
+        if (reachable) {
+          srefs.push(srefCandidates[s]);
+          console.log(`[job ${job.id}] Sref ${s + 1} verified OK: "${srefCandidates[s].name}" → ${srefCandidates[s].url}`);
+        } else {
+          srefs.push(null);
+          console.warn(`[job ${job.id}] Sref ${s + 1} URL not reachable, Gen ${s + 2} will run without --sref`);
+        }
       }
     }
   }
 
   job.assignedProfiles = profiles.map((p) => p.label);
-  job.assignedSref = sref ? sref.name : null;
+  job.assignedSrefs = srefs.filter(Boolean).map((s) => s.name);
   console.log(`[job ${job.id}] Profiles: ${profiles.map((p) => p.label).join(', ')}`);
 
+  // Gen 1 (i=0): profile only — Gen 2 (i=1): profile + srefs[0] — Gen 3 (i=2): profile + srefs[1]
   const submissionResults = await Promise.allSettled(
     job.concepts.map((c, i) => {
       const opts = { profile: profiles[i].tag };
-      if (i === NUM_CONCEPTS - 1 && sref) {
-        opts.sref = sref.url;
-        opts.sw = STYLE_WEIGHT;
+      if (i >= 1) {
+        const srefEntry = srefs[i - 1];
+        if (srefEntry) {
+          opts.sref = srefEntry.url;
+          opts.sw = STYLE_WEIGHT;
+        }
       }
       return submitMidjourneyJob(c.prompt, opts);
     })
@@ -675,17 +692,17 @@ async function generateAllImages(job) {
   const tasks = [];
   for (let i = 0; i < submissionResults.length; i++) {
     const result = submissionResults[i];
+    const hadSref = i >= 1 && !!srefs[i - 1];
     if (result.status === 'fulfilled') {
-      tasks.push({ taskId: result.value, concept: job.concepts[i], usedSref: i === NUM_CONCEPTS - 1 && !!sref });
+      tasks.push({ taskId: result.value, concept: job.concepts[i], genIndex: i, usedSref: hadSref });
     } else {
       const errMsg = result.reason?.message || 'Unknown error';
       console.error(`[job ${job.id}] Submission failed Gen ${i + 1} "${job.concepts[i].concept}": ${errMsg}`);
-      // Auto-retry without --sref if that was the gen that had it
-      if (i === NUM_CONCEPTS - 1 && sref) {
+      if (hadSref) {
         console.log(`[job ${job.id}] Retrying Gen ${i + 1} without --sref...`);
         try {
           const retryId = await submitMidjourneyJob(job.concepts[i].prompt, { profile: profiles[i].tag });
-          tasks.push({ taskId: retryId, concept: job.concepts[i], usedSref: false });
+          tasks.push({ taskId: retryId, concept: job.concepts[i], genIndex: i, usedSref: false });
           console.log(`[job ${job.id}] Gen ${i + 1} submission retry succeeded`);
         } catch (retryErr) {
           console.error(`[job ${job.id}] Gen ${i + 1} submission retry also failed: ${retryErr.message}`);
@@ -707,21 +724,21 @@ async function generateAllImages(job) {
 
   console.log(`[job ${job.id}] Grids complete, processing results...`);
 
-  // If any gen that used --sref failed during polling, retry without it
   for (let i = 0; i < gridResults.length; i++) {
     const failed = gridResults[i].status === 'rejected' ||
       (gridResults[i].status === 'fulfilled' && !gridResults[i].value?.imageUrl);
     if (failed && tasks[i].usedSref) {
+      const gi = tasks[i].genIndex;
       const failReason = gridResults[i].status === 'rejected'
         ? gridResults[i].reason?.message : 'No image URL returned';
-      console.error(`[job ${job.id}] Gen ${i + 1} failed with --sref (${failReason}). Retrying without...`);
+      console.error(`[job ${job.id}] Gen ${gi + 1} failed with --sref (${failReason}). Retrying without...`);
       try {
-        const retryId = await submitMidjourneyJob(tasks[i].concept.prompt, { profile: profiles[i].tag });
+        const retryId = await submitMidjourneyJob(tasks[i].concept.prompt, { profile: profiles[gi].tag });
         const retryGrid = await pollGridJob(retryId);
         gridResults[i] = { status: 'fulfilled', value: retryGrid };
-        console.log(`[job ${job.id}] Gen ${i + 1} polling retry succeeded`);
+        console.log(`[job ${job.id}] Gen ${gi + 1} polling retry succeeded`);
       } catch (retryErr) {
-        console.error(`[job ${job.id}] Gen ${i + 1} polling retry also failed: ${retryErr.message}`);
+        console.error(`[job ${job.id}] Gen ${gi + 1} polling retry also failed: ${retryErr.message}`);
       }
     }
   }
@@ -732,7 +749,7 @@ async function generateAllImages(job) {
 
   for (let i = 0; i < gridResults.length; i++) {
     if (gridResults[i].status === 'rejected') {
-      console.error(`[job ${job.id}] Grid poll failed for Gen ${i + 1} "${tasks[i].concept.concept}": ${gridResults[i].reason?.message}`);
+      console.error(`[job ${job.id}] Grid poll failed for Gen ${tasks[i].genIndex + 1} "${tasks[i].concept.concept}": ${gridResults[i].reason?.message}`);
       continue;
     }
 
