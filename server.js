@@ -295,7 +295,7 @@ function pickRandomSrefs(count, baseUrl) {
 
 async function verifySrefUrl(url) {
   try {
-    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(3000) });
     if (!res.ok) {
       console.error(`[sref-verify] HEAD ${url} returned ${res.status}`);
       return false;
@@ -649,24 +649,23 @@ async function generateAllImages(job) {
   const host = rpd || process.env.HOST || `localhost:${PORT}`;
   const baseUrl = rpd ? `https://${host}` : `http://${host}`;
 
-  // Pick 2 distinct srefs for Gen 2 and Gen 3; verify each is reachable
+  // Pick 2 distinct srefs for Gen 2 and Gen 3; verify reachability in parallel
   const SREF_COUNT = 2;
   const srefCandidates = pickRandomSrefs(SREF_COUNT, baseUrl);
-  const srefs = []; // verified srefs, indexed 0 → Gen 2, 1 → Gen 3
+  let srefs = []; // verified srefs, indexed 0 → Gen 2, 1 → Gen 3
   if (srefCandidates.length > 0) {
     if (!rpd) {
       console.warn(`[job ${job.id}] RAILWAY_PUBLIC_DOMAIN not set — skipping --sref (Midjourney can't reach localhost)`);
     } else {
-      for (let s = 0; s < srefCandidates.length; s++) {
-        const reachable = await verifySrefUrl(srefCandidates[s].url);
-        if (reachable) {
-          srefs.push(srefCandidates[s]);
-          console.log(`[job ${job.id}] Sref ${s + 1} verified OK: "${srefCandidates[s].name}" → ${srefCandidates[s].url}`);
-        } else {
-          srefs.push(null);
-          console.warn(`[job ${job.id}] Sref ${s + 1} URL not reachable, Gen ${s + 2} will run without --sref`);
+      const checks = await Promise.all(srefCandidates.map((c) => verifySrefUrl(c.url)));
+      srefs = srefCandidates.map((c, s) => {
+        if (checks[s]) {
+          console.log(`[job ${job.id}] Sref ${s + 1} verified OK: "${c.name}" → ${c.url}`);
+          return c;
         }
-      }
+        console.warn(`[job ${job.id}] Sref ${s + 1} URL not reachable, Gen ${s + 2} will run without --sref`);
+        return null;
+      });
     }
   }
 
