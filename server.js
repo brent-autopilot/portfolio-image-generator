@@ -392,36 +392,36 @@ async function generateThemes(job) {
   let extraReturnFields = '';
 
   if (job.useStyleBank) {
-    const style1 = job.manualStyle || pickRandomStyles(1)[0];
+    const styles = job.manualStyle
+      ? Array(NUM_CONCEPTS).fill(job.manualStyle)
+      : pickRandomStyles(NUM_CONCEPTS);
     const interpretations = job.manualInterpretation
       ? Array(NUM_CONCEPTS).fill(job.manualInterpretation)
       : pickRandomInterpretations(NUM_CONCEPTS);
-    job.assignedStyles = [style1, null, null];
+    job.assignedStyles = styles;
     job.assignedInterpretations = interpretations;
-    console.log(`[job ${job.id}] Assigned style (Concept 1 only):`, style1);
+    console.log(`[job ${job.id}] Assigned styles:`, styles);
     console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
 
-    const directives = [
-      `  Concept 1 style: "${style1}"\n  Concept 1 interpretation: "${interpretations[0]}"`,
-      `  Concept 2 interpretation: "${interpretations[1]}"`,
-      `  Concept 3 interpretation: "${interpretations[2]}"`,
-    ].join('\n');
+    const directives = styles
+      .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} interpretation: "${interpretations[i]}"`)
+      .join('\n');
 
-    directivesParagraph = `\n\nConcept 1 has a mandatory visual style AND interpretation angle.
-Concepts 2 and 3 have only an interpretation angle — their visual style will be controlled by a Midjourney style reference image, so do NOT describe any artistic medium, texture, or rendering technique in their prompts. Focus purely on the subject matter and scene.
+    directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style AND a mandatory interpretation angle.
 
 Style defines the artistic treatment — the medium, technique, or rendering approach.
 Interpretation defines the creative angle — how to THINK about the fund thesis when choosing what to depict.
 
+You MUST use BOTH for each concept:
+
 ${directives}
 
 CRITICAL RULES:
-- For Concept 1: the style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
-- For Concepts 2 and 3: do NOT include any style/medium/texture language — only describe WHAT to depict, not how it should look. A visual style will be applied separately.
-- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back.
+- The style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
+- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back. Example: for a mortgage fund, "interpret through architecture" should show mortgage-related architecture (foreclosed house, bank vault), not unrelated buildings.
 - The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
 
-    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly, or null if none was assigned)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
+    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
   } else {
     console.log(`[job ${job.id}] Style bank disabled`);
   }
