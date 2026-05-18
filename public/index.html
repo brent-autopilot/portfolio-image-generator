@@ -883,40 +883,64 @@
       opacity: 0.7;
       filter: grayscale(0.3);
     }
-    /* Generation rating strip — sits between generation groups */
-    .gen-rating-strip {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
+    /* Rating sidebar — fixed left edge */
+    .rating-sidebar {
+      position: fixed;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 100;
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .rating-sidebar.hidden { display: none; }
+
+    .gen-rating-strip {
+      display: flex;
+      flex-direction: column;
       gap: 6px;
-      z-index: 50;
-      padding: 6px 14px;
-      background: rgba(10, 10, 14, 0.75);
-      backdrop-filter: blur(12px);
+      padding: 10px 14px;
+      background: rgba(10, 10, 14, 0.8);
+      backdrop-filter: blur(16px);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 20px;
+      border-radius: 14px;
       font-family: var(--mono);
       font-size: 9px;
       letter-spacing: 0.5px;
       color: var(--text-dim);
       text-transform: uppercase;
-      white-space: nowrap;
       user-select: none;
+      cursor: default;
+      transition: border-color 0.2s, background 0.2s;
+      min-width: 120px;
+    }
+    .gen-rating-strip:hover {
+      border-color: rgba(255,255,255,0.18);
+      background: rgba(10, 10, 14, 0.9);
+    }
+    .gen-rating-strip .strip-top {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     .gen-rating-strip .gen-label {
       color: var(--text-mid);
       font-weight: 600;
-      margin-right: 2px;
+      white-space: nowrap;
     }
     .gen-rating-strip .gen-components {
       color: var(--text-dim);
       font-size: 7px;
-      max-width: 200px;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100px;
       cursor: help;
+    }
+    .gen-rating-strip .strip-buttons {
+      display: flex;
+      gap: 5px;
     }
     .gen-rating-strip .rate-btn {
       display: inline-flex;
@@ -961,6 +985,28 @@
       font-size: 7px;
       color: var(--text-dim);
       font-style: italic;
+    }
+
+    /* Hover-to-highlight: dim/brighten cards by generation */
+    .gallery-card.gen-dimmed {
+      opacity: 0.2 !important;
+      filter: grayscale(0.5) !important;
+      transition: opacity 0.3s, filter 0.3s;
+    }
+    .gallery-card.gen-highlighted {
+      filter: brightness(1.1) !important;
+      transition: opacity 0.3s, filter 0.3s;
+    }
+
+    @media (max-width: 768px) {
+      .rating-sidebar {
+        left: 50%;
+        top: auto;
+        bottom: 12px;
+        transform: translateX(-50%);
+        flex-direction: row;
+      }
+      .gen-rating-strip { min-width: auto; }
     }
 
     @keyframes galleryFadeIn {
@@ -1333,6 +1379,7 @@
       <div class="results-header results-header--pass"><h2>Results</h2><div class="results-line"></div></div>
       <div id="gallery-scatter" class="gallery-scatter"></div>
     </section>
+    <div id="rating-sidebar" class="rating-sidebar hidden"></div>
   </div>
 
   <!-- Lightbox -->
@@ -1565,6 +1612,7 @@
     const errorText = document.getElementById('error-text');
     const gallerySection = document.getElementById('gallery-section');
     const galleryScatter = document.getElementById('gallery-scatter');
+    const ratingSidebar = document.getElementById('rating-sidebar');
     const processingOverlay = document.getElementById('processing-overlay');
     const processingLabel = document.getElementById('processing-label');
     const historyBtn = document.getElementById('history-btn');
@@ -1629,6 +1677,8 @@
       pipelineSection.classList.remove('processing');
       gallerySection.classList.add('hidden');
       galleryScatter.innerHTML = '';
+      ratingSidebar.classList.add('hidden');
+      ratingSidebar.innerHTML = '';
       closeLightbox();
       conceptsPreview.classList.add('hidden');
       conceptsList.innerHTML = '';
@@ -1733,6 +1783,7 @@
       const isRejected = img.verdict === 'FAIL' || img.verdict === 'ERROR';
       card.className = `gallery-card gallery-card--pass${isRejected ? ' gallery-card--rejected' : ''}`;
       card.dataset.depth = slot.depth;
+      card.dataset.genIndex = img.genIndex != null ? img.genIndex : 0;
       card.style.left = `${slot.x}%`;
       card.style.top = `${slot.y}px`;
       card.style.zIndex = Math.round(slot.depth * 10);
@@ -1816,22 +1867,24 @@
       }
     }
 
-    function createRatingStrip(genIndex, topOffset, componentInfo) {
+    function createRatingStrip(genIndex, componentInfo) {
       const strip = document.createElement('div');
       strip.className = 'gen-rating-strip';
-      strip.dataset.noParallax = '1';
-      strip.style.top = `${topOffset}px`;
       strip.dataset.genIndex = genIndex;
 
       const parts = [componentInfo.style, componentInfo.interpretation, componentInfo.profile].filter(Boolean);
       const tooltipText = parts.map((p) => p.length > 60 ? p.slice(0, 57) + '...' : p).join(' · ');
 
       strip.innerHTML = `
-        <span class="gen-label">Gen ${genIndex + 1}</span>
-        <span class="gen-components" title="${esc(tooltipText)}">${esc(tooltipText ? tooltipText.slice(0, 40) + (tooltipText.length > 40 ? '...' : '') : '')}</span>
-        <button class="rate-btn" data-rating="up" title="Thumbs up">&#x25B2;</button>
-        <button class="rate-btn" data-rating="neutral" title="Neutral">&#x25CF;</button>
-        <button class="rate-btn" data-rating="down" title="Thumbs down">&#x25BC;</button>
+        <div class="strip-top">
+          <span class="gen-label">Gen ${genIndex + 1}</span>
+          <span class="gen-components" title="${esc(tooltipText)}">${esc(tooltipText ? tooltipText.slice(0, 30) + (tooltipText.length > 30 ? '...' : '') : '')}</span>
+        </div>
+        <div class="strip-buttons">
+          <button class="rate-btn" data-rating="up" title="Thumbs up">&#x25B2;</button>
+          <button class="rate-btn" data-rating="neutral" title="Neutral">&#x25CF;</button>
+          <button class="rate-btn" data-rating="down" title="Thumbs down">&#x25BC;</button>
+        </div>
       `;
 
       const existing = _genRatings[genIndex];
@@ -1839,6 +1892,25 @@
         const activeBtn = strip.querySelector(`.rate-btn[data-rating="${existing}"]`);
         if (activeBtn) activeBtn.classList.add('active-' + existing);
       }
+
+      strip.addEventListener('mouseenter', () => {
+        if (!_galleryContainer) return;
+        for (const card of _galleryContainer.children) {
+          if (String(card.dataset.genIndex) === String(genIndex)) {
+            card.classList.add('gen-highlighted');
+            card.classList.remove('gen-dimmed');
+          } else {
+            card.classList.add('gen-dimmed');
+            card.classList.remove('gen-highlighted');
+          }
+        }
+      });
+      strip.addEventListener('mouseleave', () => {
+        if (!_galleryContainer) return;
+        for (const card of _galleryContainer.children) {
+          card.classList.remove('gen-dimmed', 'gen-highlighted');
+        }
+      });
 
       const buttons = strip.querySelectorAll('.rate-btn');
       for (const btn of buttons) {
@@ -1876,6 +1948,7 @@
 
     function renderGalleryWithRatings(container, images, serverRatings) {
       container.innerHTML = '';
+      ratingSidebar.innerHTML = '';
       _ratingStrips = [];
 
       if (serverRatings) {
@@ -1894,11 +1967,9 @@
 
       for (const gi of genIndices) {
         const group = genGroups[gi];
-        const firstSlot = GALLERY_SLOTS[globalIndex % GALLERY_SLOTS.length];
-        const stripY = firstSlot.y - 30;
         const first = group[0] || {};
         const info = { style: first.style || '', interpretation: first.interpretation || '', profile: first.profileLabel || '' };
-        container.appendChild(createRatingStrip(gi, stripY, info));
+        ratingSidebar.appendChild(createRatingStrip(gi, info));
 
         for (const img of group) {
           container.appendChild(renderGalleryCard(img, globalIndex));
@@ -1906,20 +1977,18 @@
         }
       }
 
+      ratingSidebar.classList.remove('hidden');
       initGalleryParallax(container);
     }
 
     let _galleryContainer = null;
-    function isParallaxCard(el) { return !el.dataset.noParallax; }
     function initGalleryParallax(container) {
       _galleryContainer = container;
 
       for (const card of container.children) {
-        if (!isParallaxCard(card)) continue;
         card.addEventListener('mouseenter', () => {
           const hoveredDepth = parseFloat(card.dataset.depth) || 0.5;
           for (const other of container.children) {
-            if (!isParallaxCard(other)) continue;
             if (other === card) {
               other.style.filter = 'blur(0px)';
               continue;
@@ -1932,7 +2001,6 @@
         });
         card.addEventListener('mouseleave', () => {
           for (const other of container.children) {
-            if (!isParallaxCard(other)) continue;
             other.style.filter = 'blur(0px)';
           }
         });
@@ -1944,7 +2012,6 @@
       const mx = (e.clientX / window.innerWidth - 0.5) * 2;
       const my = (e.clientY / window.innerHeight - 0.5) * 2;
       for (const card of _galleryContainer.children) {
-        if (!isParallaxCard(card)) continue;
         const depth = parseFloat(card.dataset.depth) || 0.5;
         const baseRot = parseFloat(card.dataset.baseRotation) || 0;
         const tx = mx * depth * 50;
