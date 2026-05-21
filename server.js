@@ -119,7 +119,7 @@ const NUM_CONCEPTS = 3;
 const JOB_TTL_MS = 30 * 60 * 1000;
 const JOB_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_POLL_ATTEMPTS = 60;
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 3000;
 
 // ---------------------------------------------------------------------------
 // Lazy Anthropic client — initialized on first use so env vars are resolved
@@ -725,16 +725,17 @@ async function cropGridToQuadrants(gridUrl, jobId, gridIndex) {
   const jobDir = join(QUADRANT_DIR, jobId);
   if (!existsSync(jobDir)) mkdirSync(jobDir, { recursive: true });
 
-  const files = [];
-  for (let q = 0; q < 4; q++) {
-    const filename = `grid${gridIndex}-q${q}.jpg`;
-    const filepath = join(jobDir, filename);
-    await sharp(buffer)
-      .extract({ left: quadrants[q].left, top: quadrants[q].top, width: halfW, height: halfH })
-      .jpeg({ quality: 92 })
-      .toFile(filepath);
-    files.push(filename);
-  }
+  const files = await Promise.all(
+    quadrants.map(async (quad, q) => {
+      const filename = `grid${gridIndex}-q${q}.jpg`;
+      const filepath = join(jobDir, filename);
+      await sharp(buffer)
+        .extract({ left: quad.left, top: quad.top, width: halfW, height: halfH })
+        .jpeg({ quality: 92 })
+        .toFile(filepath);
+      return filename;
+    })
+  );
 
   return files;
 }
@@ -847,48 +848,51 @@ async function generateAllImages(job) {
 
   console.log(`[job ${job.id}] Cropping quadrants...`);
 
-  const allImages = [];
+  const cropResults = await Promise.allSettled(
+    gridResults.map(async (gr, i) => {
+      if (gr.status === 'rejected') {
+        console.error(`[job ${job.id}] Grid poll failed for Gen ${tasks[i].genIndex + 1} "${tasks[i].concept.concept}": ${gr.reason?.message}`);
+        return [];
+      }
 
-  for (let i = 0; i < gridResults.length; i++) {
-    if (gridResults[i].status === 'rejected') {
-      console.error(`[job ${job.id}] Grid poll failed for Gen ${tasks[i].genIndex + 1} "${tasks[i].concept.concept}": ${gridResults[i].reason?.message}`);
-      continue;
-    }
+      const { jobId: gridJobId, imageUrl } = gr.value;
+      const concept = tasks[i].concept;
 
-    const { jobId: gridJobId, imageUrl } = gridResults[i].value;
-    const concept = tasks[i].concept;
+      if (!imageUrl) {
+        console.error(`[job ${job.id}] No image URL for grid "${concept.concept}"`);
+        return [];
+      }
 
-    if (!imageUrl) {
-      console.error(`[job ${job.id}] No image URL for grid "${concept.concept}"`);
-      continue;
-    }
-
-    try {
       const gi = tasks[i].genIndex;
       const quadrantFiles = await cropGridToQuadrants(imageUrl, job.id, i);
-      for (let q = 0; q < quadrantFiles.length; q++) {
-        allImages.push({
-          rawIndex: allImages.length,
-          url: `/api/quadrant/${job.id}/${quadrantFiles[q]}`,
-          gridUrl: imageUrl,
-          gridJobId,
-          imageNo: q,
-          quadrantFile: quadrantFiles[q],
-          upscaled: false,
-          concept: concept.concept,
-          prompt: concept.prompt,
-          style: concept.style || null,
-          interpretation: concept.interpretation || null,
-          genIndex: gi,
-          profile: profiles[gi]?.tag || null,
-          profileLabel: profiles[gi]?.label || null,
-          srefName: tasks[i].usedSref ? (job.actualSrefs[gi] || null) : null,
-        });
-      }
-    } catch (err) {
-      console.error(`[job ${job.id}] Failed to crop grid for "${concept.concept}":`, err.message);
+      return quadrantFiles.map((qf, q) => ({
+        url: `/api/quadrant/${job.id}/${qf}`,
+        gridUrl: imageUrl,
+        gridJobId,
+        imageNo: q,
+        quadrantFile: qf,
+        upscaled: false,
+        concept: concept.concept,
+        prompt: concept.prompt,
+        style: concept.style || null,
+        interpretation: concept.interpretation || null,
+        genIndex: gi,
+        profile: profiles[gi]?.tag || null,
+        profileLabel: profiles[gi]?.label || null,
+        srefName: tasks[i].usedSref ? (job.actualSrefs[gi] || null) : null,
+      }));
+    })
+  );
+
+  const allImages = [];
+  for (const cr of cropResults) {
+    if (cr.status === 'fulfilled') {
+      allImages.push(...cr.value);
+    } else {
+      console.error(`[job ${job.id}] Crop failed:`, cr.reason?.message);
     }
   }
+  allImages.forEach((img, idx) => { img.rawIndex = idx; });
 
   job.rawImages = allImages;
 
@@ -905,6 +909,65 @@ async function generateAllImages(job) {
 // ---------------------------------------------------------------------------
 const QC_MODEL = 'claude-sonnet-4-20250514';
 
+const QC_CONCURRENCY = 6;
+
+async function qcOneImage(img, jobId, clogPrompt) {
+  let verdict = 'ERROR';
+  let reason = '';
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      let buf;
+      let mediaType = 'image/jpeg';
+
+      if (img.quadrantFile) {
+        const qPath = join(QUADRANT_DIR, jobId, img.quadrantFile);
+        buf = readFileSync(qPath);
+      } else {
+        const imgRes = await fetch(img.url);
+        if (!imgRes.ok) throw new Error(`Failed to download image for QC: HTTP ${imgRes.status}`);
+        buf = Buffer.from(await imgRes.arrayBuffer());
+        const contentType = imgRes.headers.get('content-type') || 'image/png';
+        mediaType = contentType.split(';')[0].trim();
+      }
+
+      const base64 = buf.toString('base64');
+
+      const resp = await getAnthropic().messages.create({
+        model: QC_MODEL,
+        max_tokens: 10,
+        system: clogPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: mediaType, data: base64 },
+              },
+            ],
+          },
+        ],
+      });
+
+      const raw = resp.content
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text)
+        .join('')
+        .trim();
+
+      verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
+      break;
+    } catch (err) {
+      reason = err.message || 'QC check failed';
+      console.error(`[job ${img.concept}] QC attempt ${attempt + 1} failed:`, reason);
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+
+  return { ...img, verdict, ...(verdict === 'ERROR' ? { reason } : {}) };
+}
+
 async function runClogCheck(job) {
   const clogPrompt = loadClogPrompt();
   if (!clogPrompt) {
@@ -918,70 +981,18 @@ async function runClogCheck(job) {
 
   job.stage = 'qc_check';
 
-  const approved = [];
-  const rejected = [];
-
-  for (const img of job.rawImages) {
-    let verdict = 'ERROR';
-    let reason = '';
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        let buf;
-        let mediaType = 'image/jpeg';
-
-        if (img.quadrantFile) {
-          const qPath = join(QUADRANT_DIR, job.id, img.quadrantFile);
-          buf = readFileSync(qPath);
-        } else {
-          const imgRes = await fetch(img.url);
-          if (!imgRes.ok) throw new Error(`Failed to download image for QC: HTTP ${imgRes.status}`);
-          buf = Buffer.from(await imgRes.arrayBuffer());
-          const contentType = imgRes.headers.get('content-type') || 'image/png';
-          mediaType = contentType.split(';')[0].trim();
-        }
-
-        const base64 = buf.toString('base64');
-
-        const resp = await getAnthropic().messages.create({
-          model: QC_MODEL,
-          max_tokens: 10,
-          system: clogPrompt,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: { type: 'base64', media_type: mediaType, data: base64 },
-                },
-              ],
-            },
-          ],
-        });
-
-        const raw = resp.content
-          .filter((b) => b.type === 'text')
-          .map((b) => b.text)
-          .join('')
-          .trim();
-
-        verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
-        break;
-      } catch (err) {
-        reason = err.message || 'QC check failed';
-        console.error(`[job ${img.concept}] QC attempt ${attempt + 1} failed:`, reason);
-        if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
-      }
-    }
-
-    const entry = { ...img, verdict, ...(verdict === 'ERROR' ? { reason } : {}) };
-    if (verdict === 'PASS') approved.push(entry);
-    else rejected.push(entry);
+  const images = [...job.rawImages];
+  const results = [];
+  for (let i = 0; i < images.length; i += QC_CONCURRENCY) {
+    const batch = images.slice(i, i + QC_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map((img) => qcOneImage(img, job.id, clogPrompt))
+    );
+    results.push(...batchResults);
   }
 
-  job.approvedImages = approved;
-  job.rejectedImages = rejected;
+  job.approvedImages = results.filter((r) => r.verdict === 'PASS');
+  job.rejectedImages = results.filter((r) => r.verdict !== 'PASS');
   job.stage = 'complete';
 }
 
