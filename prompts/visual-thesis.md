@@ -77,7 +77,7 @@ Ask: what emotional register does this fund operate in?
 
 Choose ONE register and commit. State the rendering approach explicitly in the prompt.
 
-NOTE: An external style directive may be provided (e.g. "cyanotype print, deep Prussian blue with white silhouettes"). When present, it replaces your style selection above — use it as the rendering treatment. But it controls only the visual medium, technique, texture, and color treatment. It never overrides the fund thesis as the source of the subject matter. If the style directive mentions specific objects, treat those as material or textural qualities to apply to the thesis-driven subject.
+NOTE: An external style directive may be provided (e.g. "cyanotype print, deep Prussian blue with white silhouettes"). When present, it replaces your style selection above — use it as the rendering treatment. But it controls only the visual medium, technique, texture, and color treatment. It never overrides the fund thesis as the source of the subject matter. If the style directive mentions specific objects, treat those as material or textural qualities to apply to the thesis-driven subject. If the style directive would crowd out or obscure the fund's literal visual subject, simplify the style's influence. A recognizable subject with a hint of the style beats an unrecognizable subject drowning in it.
 
 ---
 
@@ -165,6 +165,7 @@ RULES:
 - THE THESIS IS VISIBLE. Both sides of the fund's value proposition must be in the frame. The opportunity AND the protection. The risk AND the reward. The problem AND the solution.
 - THE JSON SETS ATMOSPHERE, NOT CONTENT. Warm/cool, dramatic/soft, compressed/expansive, textured/smooth. That's it.
 - STYLE MATCHES THE THESIS'S EMOTIONAL REGISTER. Not locked to one approach.
+- RECOGNIZABILITY TEST: Before finalizing any prompt, ask: if this image had no label, would a viewer identify the core subject from the fund name? If the style treatment makes the subject ambiguous or unrecognizable, dial back the style until the subject is unmistakable. The style serves the subject, never competes with it.
 - No text, logos, UI, overlays.
 - No named emotions except the final mood line.
 - Zero nouns from the JSON.

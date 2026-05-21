@@ -372,14 +372,16 @@ const THEME_SYSTEM_PROMPT = extractSystemPrompt(visualThesisPrompt);
 // ---------------------------------------------------------------------------
 const jobs = new Map();
 
-function createJob(fundName, fundThesis, styleJson, useStyleBank = true) {
+const VALID_BYPASS_MODES = ['normal', 'skip-style', 'skip-interp', 'full-bypass'];
+
+function createJob(fundName, fundThesis, styleJson, bypassMode = 'normal') {
   const id = crypto.randomUUID();
   const job = {
     id,
     fundName,
     fundThesis,
     styleJson,
-    useStyleBank,
+    bypassMode,
     stage: 'queued',
     assignedStyles: [],
     assignedInterpretations: [],
@@ -425,26 +427,32 @@ async function generateThemes(job) {
     ? job.fundThesis.trim()
     : `A fund called "${job.fundName}" — use the name itself to infer the investment thesis and visual subject`;
 
+  const mode = job.bypassMode || 'normal';
+  const useStyles = mode === 'normal' || mode === 'skip-interp';
+  const useInterps = mode === 'normal' || mode === 'skip-style';
+  const isFullBypass = mode === 'full-bypass';
+
   let directivesParagraph = '';
   let extraReturnFields = '';
 
-  if (job.useStyleBank) {
-    const styles = job.manualStyle
-      ? Array(NUM_CONCEPTS).fill(job.manualStyle)
-      : pickRandomStyles(NUM_CONCEPTS);
-    const interpretations = job.manualInterpretation
-      ? Array(NUM_CONCEPTS).fill(job.manualInterpretation)
-      : pickRandomInterpretations(NUM_CONCEPTS);
+  if (useStyles || useInterps) {
+    const styles = useStyles
+      ? (job.manualStyle ? Array(NUM_CONCEPTS).fill(job.manualStyle) : pickRandomStyles(NUM_CONCEPTS))
+      : [];
+    const interpretations = useInterps
+      ? (job.manualInterpretation ? Array(NUM_CONCEPTS).fill(job.manualInterpretation) : pickRandomInterpretations(NUM_CONCEPTS))
+      : [];
     job.assignedStyles = styles;
     job.assignedInterpretations = interpretations;
-    console.log(`[job ${job.id}] Assigned styles:`, styles);
-    console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
+    if (styles.length) console.log(`[job ${job.id}] Assigned styles:`, styles);
+    if (interpretations.length) console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
 
-    const directives = styles
-      .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} interpretation: "${interpretations[i]}"`)
-      .join('\n');
+    if (useStyles && useInterps) {
+      const directives = styles
+        .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} interpretation: "${interpretations[i]}"`)
+        .join('\n');
 
-    directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style AND a mandatory interpretation angle.
+      directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style AND a mandatory interpretation angle.
 
 Style defines the artistic treatment — the medium, technique, or rendering approach.
 Interpretation defines the creative angle — how to THINK about the fund thesis when choosing what to depict.
@@ -458,19 +466,67 @@ CRITICAL RULES:
 - The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back. Example: for a mortgage fund, "interpret through architecture" should show mortgage-related architecture (foreclosed house, bank vault), not unrelated buildings.
 - The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
 
-    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
+      extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
+    } else if (useStyles) {
+      const directives = styles
+        .map((s, i) => `  Concept ${i + 1} style: "${s}"`)
+        .join('\n');
+
+      directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style.
+
+Style defines the artistic treatment — the medium, technique, or rendering approach.
+
+You MUST use the assigned style for each concept:
+
+${directives}
+
+CRITICAL RULES:
+- The style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
+- The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
+
+      extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)';
+    } else if (useInterps) {
+      const directives = interpretations
+        .map((interp, i) => `  Concept ${i + 1} interpretation: "${interp}"`)
+        .join('\n');
+
+      directivesParagraph = `\n\nEach concept has been assigned a mandatory interpretation angle.
+
+Interpretation defines the creative angle — how to THINK about the fund thesis when choosing what to depict.
+
+You MUST use the assigned interpretation for each concept:
+
+${directives}
+
+CRITICAL RULES:
+- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back.
+- The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
+
+      extraReturnFields = '\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
+    }
   } else {
-    console.log(`[job ${job.id}] Style bank disabled`);
+    console.log(`[job ${job.id}] Full bypass — style + interpretation banks disabled`);
   }
 
-  const resp = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
-    system: THEME_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `THE FUND (this is the most important input — everything else serves this):
+  let systemPrompt = THEME_SYSTEM_PROMPT;
+  let userMessage;
+
+  if (isFullBypass) {
+    systemPrompt = `You are a visual prompt distiller for Midjourney image generation. Given a fund name and optional thesis, identify the most obvious literal visual subject. Strip financial jargon and abstract concepts. Return clean, concrete image prompts focused on what the fund name evokes visually. Keep prompts simple, literal, and vivid — comma-separated fragments, not sentences. 15-30 words per prompt.`;
+
+    userMessage = `Fund name: "${job.fundName}"
+Thesis: "${thesis}"
+
+What does this fund name literally look like? Identify the core visual subject and generate exactly ${NUM_CONCEPTS} different simple, literal Midjourney prompts. Each should depict the fund's subject from a different angle but stay concrete and obvious.
+
+Return ONLY a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
+- "anchor": the obvious visual subject (1-3 words)
+- "concept": a 2-3 word label
+- "prompt": the Midjourney image prompt (15-30 words, simple and literal)
+
+Return ONLY the JSON array, no other text.`;
+  } else {
+    userMessage = `THE FUND (this is the most important input — everything else serves this):
 
   FUND NAME: "${job.fundName}"
   FUND THESIS: "${thesis}"
@@ -498,9 +554,14 @@ Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each wi
 - "concept": a 2-3 word label for your creative angle on the anchor
 - "prompt": the Midjourney image prompt (20-45 words, evocative fragments not sentences) — the anchor subject MUST be the dominant element${extraReturnFields}
 
-Return ONLY the JSON array, no other text.`,
-      },
-    ],
+Return ONLY the JSON array, no other text.`;
+  }
+
+  const resp = await getAnthropic().messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
   });
 
   const raw = resp.content
@@ -529,7 +590,7 @@ Return ONLY the JSON array, no other text.`,
   }
 
   job.concepts = valid;
-  console.log(`[job ${job.id}] Generated ${job.concepts.length} concepts:`);
+  console.log(`[job ${job.id}] [${mode}] Generated ${job.concepts.length} concepts:`);
   job.concepts.forEach((c, i) => console.log(`  ${i + 1}. [${c.concept}] ${c.prompt}`));
 
   return job.concepts;
@@ -958,7 +1019,7 @@ async function runQcInBackground(job) {
 // Routes
 // ---------------------------------------------------------------------------
 app.post('/api/generate', (req, res) => {
-  const { fundName, fundThesis, styleJson, useStyleBank, manualStyle, manualInterpretation } = req.body;
+  const { fundName, fundThesis, styleJson, useStyleBank, bypassMode: rawBypass, manualStyle, manualInterpretation } = req.body;
 
   const name = typeof fundName === 'string' ? fundName.trim() : '';
   if (!name) return res.status(400).json({ error: 'fundName is required' });
@@ -967,8 +1028,14 @@ app.post('/api/generate', (req, res) => {
   const thesis = typeof fundThesis === 'string' ? fundThesis.trim() : '';
   if (thesis.length > 2000) return res.status(400).json({ error: 'fundThesis too long' });
 
-  const styleBankEnabled = useStyleBank === true || useStyleBank === undefined;
-  const job = createJob(name, thesis, styleJson || null, styleBankEnabled);
+  let mode = 'normal';
+  if (typeof rawBypass === 'string' && VALID_BYPASS_MODES.includes(rawBypass)) {
+    mode = rawBypass;
+  } else if (useStyleBank === false) {
+    mode = 'full-bypass';
+  }
+
+  const job = createJob(name, thesis, styleJson || null, mode);
   if (typeof manualStyle === 'string' && manualStyle.trim()) job.manualStyle = manualStyle.trim();
   if (typeof manualInterpretation === 'string' && manualInterpretation.trim()) job.manualInterpretation = manualInterpretation.trim();
   runPipeline(job);
@@ -985,7 +1052,7 @@ app.get('/api/status/:jobId', (req, res) => {
     stage: job.stage,
     fundName: job.fundName,
     fundThesis: job.fundThesis,
-    useStyleBank: job.useStyleBank,
+    bypassMode: job.bypassMode,
     assignedStyles: job.assignedStyles,
     assignedInterpretations: job.assignedInterpretations,
     assignedProfiles: job.assignedProfiles,
@@ -1011,7 +1078,7 @@ app.get('/api/results/:jobId', (req, res) => {
     stage: job.stage,
     fundName: job.fundName,
     fundThesis: job.fundThesis,
-    useStyleBank: job.useStyleBank,
+    bypassMode: job.bypassMode,
     assignedStyles: job.assignedStyles,
     assignedInterpretations: job.assignedInterpretations,
     assignedProfiles: job.assignedProfiles,

@@ -55,8 +55,7 @@
     .gallery-dl-btn:focus-visible,
     .gallery-upscale-btn:focus-visible,
     .lightbox-dl:focus-visible,
-    .lightbox-close:focus-visible,
-    .toggle-track:focus-visible {
+    .lightbox-close:focus-visible {
       outline: none;
       box-shadow: var(--focus-ring);
     }
@@ -458,52 +457,47 @@
     }
     .bank-modal-item:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
-    /* Style bank toggle */
-    .toggle-row {
+    /* Bypass mode segmented control */
+    .seg-control {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 2px;
       margin-bottom: 18px;
+      gap: 2px;
     }
-    .toggle-label {
+    .seg-btn {
+      flex: 1;
+      padding: 7px 4px;
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 8px;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: var(--label-track);
+      letter-spacing: 0.8px;
       color: var(--text-dim);
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      text-align: center;
       user-select: none;
-      cursor: pointer;
-      transition: color 0.2s;
     }
-    .toggle-label.active { color: rgba(255,255,255,0.7); }
-    .toggle-track {
-      position: relative;
-      width: 36px;
-      height: 20px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
-      cursor: pointer;
-      flex-shrink: 0;
-      transition: background 0.25s, border-color 0.25s;
-    }
-    .toggle-track.on {
-      background: rgba(255,255,255,0.2);
-      border-color: rgba(255,255,255,0.3);
-    }
-    .toggle-thumb {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 14px;
-      height: 14px;
-      background: rgba(255,255,255,0.4);
-      border-radius: 50%;
-      transition: transform 0.25s, background 0.25s;
-    }
-    .toggle-track.on .toggle-thumb {
-      transform: translateX(16px);
+    .seg-btn:hover { color: var(--text-mid); background: rgba(255,255,255,0.06); }
+    .seg-btn.active {
+      color: #0a0a0f;
       background: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .seg-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+    .bank-select-wrap.dimmed {
+      opacity: 0.3;
+      pointer-events: none;
     }
 
     /* Generate button */
@@ -1464,11 +1458,11 @@
           </div>
         </div>
         <div class="btn-wrap">
-          <div class="toggle-row">
-            <div id="style-bank-toggle" class="toggle-track on" role="switch" aria-checked="true" tabindex="0">
-              <div class="toggle-thumb"></div>
-            </div>
-            <span id="style-bank-label" class="toggle-label active">Editorial</span>
+          <div id="bypass-control" class="seg-control" role="radiogroup" aria-label="Bypass mode">
+            <button class="seg-btn active" data-mode="normal">Normal</button>
+            <button class="seg-btn" data-mode="skip-style">Skip Style</button>
+            <button class="seg-btn" data-mode="skip-interp">Skip Interp</button>
+            <button class="seg-btn" data-mode="full-bypass">Full Bypass</button>
           </div>
           <button id="generate-btn" class="generate-btn">Generate</button>
         </div>
@@ -1597,14 +1591,17 @@
     const bgLayer = document.getElementById('bg-layer');
     const fundNameInput = document.getElementById('fund-name');
     const fundThesisInput = document.getElementById('fund-thesis');
-    const styleBankToggle = document.getElementById('style-bank-toggle');
-    const styleBankLabel = document.getElementById('style-bank-label');
-    let styleBankEnabled = true;
+    const bypassControl = document.getElementById('bypass-control');
+    const bypassBtns = bypassControl.querySelectorAll('.seg-btn');
+    let bypassMode = 'normal';
 
     let bankStyles = [];
     let bankInterps = [];
     let selectedStyle = null;
     let selectedInterp = null;
+
+    const styleWrap = document.querySelectorAll('.bank-select-wrap')[0];
+    const interpWrap = document.querySelectorAll('.bank-select-wrap')[1];
 
     const styleTrigger = document.getElementById('style-trigger');
     const styleTriggerText = document.getElementById('style-trigger-text');
@@ -1704,18 +1701,19 @@
       });
     });
 
-    function setStyleBankToggle(on) {
-      styleBankEnabled = on;
-      styleBankToggle.classList.toggle('on', on);
-      styleBankToggle.setAttribute('aria-checked', String(on));
-      styleBankLabel.classList.toggle('active', on);
-      styleBankLabel.textContent = on ? 'Editorial' : 'Raw';
+    function setBypassMode(mode) {
+      bypassMode = mode;
+      for (const btn of bypassBtns) {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      }
+      const skipStyle = mode === 'skip-style' || mode === 'full-bypass';
+      const skipInterp = mode === 'skip-interp' || mode === 'full-bypass';
+      styleWrap.classList.toggle('dimmed', skipStyle);
+      interpWrap.classList.toggle('dimmed', skipInterp);
     }
-    styleBankToggle.addEventListener('click', () => setStyleBankToggle(!styleBankEnabled));
-    styleBankLabel.addEventListener('click', () => setStyleBankToggle(!styleBankEnabled));
-    styleBankToggle.addEventListener('keydown', (e) => {
-      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setStyleBankToggle(!styleBankEnabled); }
-    });
+    for (const btn of bypassBtns) {
+      btn.addEventListener('click', () => setBypassMode(btn.dataset.mode));
+    }
 
     const generateBtn = document.getElementById('generate-btn');
     const pipelineSection = document.getElementById('pipeline-section');
@@ -2192,7 +2190,7 @@
         const res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fundName, fundThesis, useStyleBank: styleBankEnabled, manualStyle: selectedStyle, manualInterpretation: selectedInterp }),
+          body: JSON.stringify({ fundName, fundThesis, bypassMode, manualStyle: selectedStyle, manualInterpretation: selectedInterp }),
         });
         if (res.status === 401) { location.reload(); return; }
         const data = await res.json();
@@ -2231,12 +2229,17 @@
 
         if (status.concepts?.length > 0 && conceptsPreview.classList.contains('hidden')) {
           conceptsPreview.classList.remove('hidden');
+          const bm = status.bypassMode || 'normal';
+          const showStyle = bm === 'normal' || bm === 'skip-interp';
+          const showInterp = bm === 'normal' || bm === 'skip-style';
+          const showBypassBadge = bm === 'full-bypass';
           conceptsList.innerHTML = status.concepts.map((c, i) => {
-            const style = c.style || status.assignedStyles?.[i] || '';
-            const interp = c.interpretation || status.assignedInterpretations?.[i] || '';
+            const style = showStyle ? (c.style || status.assignedStyles?.[i] || '') : '';
+            const interp = showInterp ? (c.interpretation || status.assignedInterpretations?.[i] || '') : '';
             return `<div class="concept-row">
               <span class="concept-num">${String(i+1).padStart(2,'0')}</span>
               <span class="concept-label">${esc(c.concept)}</span>
+              ${showBypassBadge ? '<span class="concept-style" style="color:var(--text-dim);background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1)">BYPASS</span>' : ''}
               ${style ? `<span class="concept-style">${esc(style)}</span>` : ''}
               ${interp ? `<span class="concept-interp">${esc(interp)}</span>` : ''}
               <span class="concept-prompt">${esc(c.prompt)}</span>
