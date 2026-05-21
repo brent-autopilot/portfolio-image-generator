@@ -248,7 +248,7 @@
       align-items: flex-end;
     }
     .input-bottom .bank-selectors { flex: 1; }
-    .input-bottom .btn-wrap { flex-shrink: 0; width: 220px; }
+    .input-bottom .btn-wrap { flex-shrink: 0; width: 340px; }
     .input-label {
       font-size: 10px;
       text-transform: uppercase;
@@ -458,39 +458,61 @@
     .bank-modal-item:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
     /* Bypass mode segmented control */
+    .seg-control-wrap {
+      margin-bottom: 14px;
+    }
+    .seg-control-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      display: block;
+    }
     .seg-control {
       display: flex;
+      position: relative;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 3px;
+    }
+    .seg-control-indicator {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      height: calc(100% - 6px);
+      width: calc(25% - 3px);
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
       border-radius: 8px;
-      padding: 2px;
-      margin-bottom: 18px;
-      gap: 2px;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+      z-index: 0;
     }
     .seg-btn {
       flex: 1;
-      padding: 7px 4px;
+      position: relative;
+      z-index: 1;
+      padding: 8px 4px;
       font-family: var(--mono);
-      font-size: 8px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
       color: var(--text-dim);
       background: transparent;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: color 0.25s;
       white-space: nowrap;
       text-align: center;
       user-select: none;
+      line-height: 1.2;
     }
-    .seg-btn:hover { color: var(--text-mid); background: rgba(255,255,255,0.06); }
-    .seg-btn.active {
-      color: #0a0a0f;
-      background: #fff;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    }
+    .seg-btn:hover { color: var(--text-mid); }
+    .seg-btn.active { color: var(--text); }
     .seg-btn:focus-visible {
       outline: none;
       box-shadow: var(--focus-ring);
@@ -502,7 +524,7 @@
 
     /* Generate button */
     .generate-btn {
-      margin-top: 20px;
+      margin-top: 6px;
       width: 100%;
       background: #fff;
       color: #0a0a0f;
@@ -1458,11 +1480,15 @@
           </div>
         </div>
         <div class="btn-wrap">
-          <div id="bypass-control" class="seg-control" role="radiogroup" aria-label="Bypass mode">
-            <button class="seg-btn active" data-mode="normal">Normal</button>
-            <button class="seg-btn" data-mode="skip-style">Skip Style</button>
-            <button class="seg-btn" data-mode="skip-interp">Skip Interp</button>
-            <button class="seg-btn" data-mode="full-bypass">Full Bypass</button>
+          <div class="seg-control-wrap">
+            <span class="seg-control-label">Mode</span>
+            <div id="bypass-control" class="seg-control" role="radiogroup" aria-label="Bypass mode">
+              <div id="seg-indicator" class="seg-control-indicator"></div>
+              <button class="seg-btn active" data-mode="normal">Normal</button>
+              <button class="seg-btn" data-mode="skip-style">Skip Style</button>
+              <button class="seg-btn" data-mode="skip-interp">Skip Interp</button>
+              <button class="seg-btn" data-mode="full-bypass">Full Bypass</button>
+            </div>
           </div>
           <button id="generate-btn" class="generate-btn">Generate</button>
         </div>
@@ -1701,11 +1727,16 @@
       });
     });
 
+    const segIndicator = document.getElementById('seg-indicator');
+    const modeOrder = ['normal', 'skip-style', 'skip-interp', 'full-bypass'];
+
     function setBypassMode(mode) {
       bypassMode = mode;
       for (const btn of bypassBtns) {
         btn.classList.toggle('active', btn.dataset.mode === mode);
       }
+      const idx = modeOrder.indexOf(mode);
+      segIndicator.style.transform = `translateX(${idx * 100}%)`;
       const skipStyle = mode === 'skip-style' || mode === 'full-bypass';
       const skipInterp = mode === 'skip-interp' || mode === 'full-bypass';
       styleWrap.classList.toggle('dimmed', skipStyle);
