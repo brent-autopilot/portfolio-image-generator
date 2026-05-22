@@ -10,9 +10,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 import sharp from 'sharp';
 import multer from 'multer';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const archiver = require('archiver');
+import { ZipArchive } from 'archiver';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1399,20 +1397,29 @@ app.get('/api/sref-image/:filename', (req, res) => {
 });
 
 app.get('/api/sref-zip', (req, res) => {
-  const srefDir = getSrefDir();
-  const files = readdirSync(srefDir).filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f));
-  if (files.length === 0) return res.status(404).json({ error: 'No sref images found' });
+  try {
+    const srefDir = getSrefDir();
+    const files = readdirSync(srefDir).filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f));
+    if (files.length === 0) return res.status(404).json({ error: 'No sref images found' });
 
-  res.set('Content-Type', 'application/zip');
-  res.set('Content-Disposition', 'attachment; filename="sref-images.zip"');
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', 'attachment; filename="sref-images.zip"');
 
-  const archive = archiver('zip', { zlib: { level: 1 } });
-  archive.on('error', (err) => { console.error('[sref-zip]', err); res.status(500).end(); });
-  archive.pipe(res);
-  for (const f of files) {
-    archive.file(join(srefDir, f), { name: f });
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.on('error', (err) => {
+      console.error('[sref-zip] archiver error:', err);
+      if (!res.headersSent) res.status(500).end();
+      else res.end();
+    });
+    archive.pipe(res);
+    for (const f of files) {
+      archive.file(join(srefDir, f), { name: f });
+    }
+    archive.finalize();
+  } catch (err) {
+    console.error('[sref-zip] unexpected error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to create zip' });
   }
-  archive.finalize();
 });
 
 app.get('/api/quadrant/:jobId/:filename', (req, res) => {
@@ -1576,21 +1583,31 @@ app.get('/api/history', (_req, res) => {
 });
 
 app.get('/api/archive-zip', (_req, res) => {
-  const history = loadHistory().filter(
-    (h) => h.filename && existsSync(join(ARCHIVE_DIR, h.filename))
-  );
-  if (history.length === 0) return res.status(404).json({ error: 'No archived images found' });
+  try {
+    const history = loadHistory().filter(
+      (h) => h.filename && existsSync(join(ARCHIVE_DIR, h.filename))
+    );
+    if (history.length === 0) return res.status(404).json({ error: 'No archived images found' });
 
-  res.set('Content-Type', 'application/zip');
-  res.set('Content-Disposition', 'attachment; filename="archive-all-images.zip"');
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', 'attachment; filename="archive-all-images.zip"');
 
-  const archive = archiver('zip', { zlib: { level: 1 } });
-  archive.on('error', (err) => { console.error('[archive-zip]', err); res.status(500).end(); });
-  archive.pipe(res);
-  for (const h of history) {
-    archive.file(join(ARCHIVE_DIR, h.filename), { name: h.filename });
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.on('error', (err) => {
+      console.error('[archive-zip] archiver error:', err);
+      if (!res.headersSent) res.status(500).end();
+      else res.end();
+    });
+    archive.pipe(res);
+    for (const h of history) {
+      const fp = join(ARCHIVE_DIR, h.filename);
+      if (existsSync(fp)) archive.file(fp, { name: h.filename });
+    }
+    archive.finalize();
+  } catch (err) {
+    console.error('[archive-zip] unexpected error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to create zip' });
   }
-  archive.finalize();
 });
 
 app.get('/api/archive/:filename', (req, res) => {
