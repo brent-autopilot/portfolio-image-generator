@@ -599,6 +599,9 @@ Return ONLY the JSON array, no other text.`;
 // ---------------------------------------------------------------------------
 // Stage 2 — LegNext.ai / Midjourney
 // ---------------------------------------------------------------------------
+const SREF_RETRY_ATTEMPTS = 2;
+const SREF_RETRY_DELAY_MS = 3000;
+
 async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = null } = {}) {
   const apiKey = process.env.LEGNEXT_API_KEY;
   if (!apiKey) throw new Error('LEGNEXT_API_KEY not configured');
@@ -606,7 +609,7 @@ async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = n
   const profileSuffix = profile ? ` ${profile}` : '';
   const srefSuffix = sref ? ` --sref ${sref} --sw ${sw ?? STYLE_WEIGHT}` : '';
   const fullPrompt = `${prompt}${profileSuffix}${srefSuffix}`;
-  console.log(`[midjourney] Submitting prompt: ${fullPrompt.slice(0, 200)}...`);
+  console.log(`[midjourney] Submitting prompt (${fullPrompt.length} chars): ${fullPrompt.slice(0, 300)}...`);
 
   const res = await fetch(`${LEGNEXT_BASE}/diffusion`, {
     method: 'POST',
@@ -621,14 +624,38 @@ async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = n
     const text = await res.text().catch(() => '');
     let msg = `LegNext diffusion returned HTTP ${res.status}`;
     try { const j = JSON.parse(text); msg = j.error?.message || j.message || msg; } catch {}
+    if (sref) console.error(`[midjourney] FULL FAILED PROMPT: ${fullPrompt}`);
     throw new Error(msg);
   }
 
   const data = await res.json();
   if (data.error && data.error.code !== 0) {
+    if (sref) console.error(`[midjourney] FULL FAILED PROMPT: ${fullPrompt}`);
     throw new Error(data.error?.message || data.message || 'LegNext diffusion request failed');
   }
   return data.job_id;
+}
+
+async function submitWithSrefRetry(prompt, opts, genLabel) {
+  const hasSref = !!opts.sref;
+  for (let attempt = 1; attempt <= (hasSref ? SREF_RETRY_ATTEMPTS : 1); attempt++) {
+    try {
+      return { jobId: await submitMidjourneyJob(prompt, opts), usedSref: hasSref };
+    } catch (err) {
+      const isContentMod = /content moderation|reference image/i.test(err.message);
+      if (hasSref && isContentMod && attempt < SREF_RETRY_ATTEMPTS) {
+        console.warn(`[${genLabel}] Sref rejected (attempt ${attempt}/${SREF_RETRY_ATTEMPTS}), retrying in ${SREF_RETRY_DELAY_MS}ms...`);
+        await new Promise((r) => setTimeout(r, SREF_RETRY_DELAY_MS));
+        continue;
+      }
+      if (hasSref && isContentMod) {
+        console.warn(`[${genLabel}] Sref rejected after ${SREF_RETRY_ATTEMPTS} attempts, falling back to no-sref`);
+        const noSrefOpts = { ...opts, sref: null, sw: null };
+        return { jobId: await submitMidjourneyJob(prompt, noSrefOpts), usedSref: false };
+      }
+      throw err;
+    }
+  }
 }
 
 async function fetchMidjourneyResult(jobId) {
@@ -774,41 +801,31 @@ async function generateAllImages(job) {
   job.profileTags = profiles.map((p) => p.tag);
   console.log(`[job ${job.id}] Profiles: ${profiles.map((p) => p.label).join(', ')}`);
 
-  // Gen 1 (i=0): profile only — Gen 2 (i=1): profile + srefs[0] — Gen 3 (i=2): profile + srefs[1]
-  const submissionResults = await Promise.allSettled(
-    job.concepts.map((c, i) => {
-      const opts = { profile: profiles[i].tag };
-      if (i >= 1) {
-        const srefEntry = srefs[i - 1];
-        if (srefEntry) {
-          opts.sref = srefEntry.url;
-          opts.sw = STYLE_WEIGHT;
-        }
-      }
-      return submitMidjourneyJob(c.prompt, opts);
-    })
-  );
-
+  // Submit Gen 1 (no sref) immediately, then stagger Gen 2 & 3 (with srefs) to
+  // avoid concurrent image fetches from the same host triggering MJ moderation.
+  const SREF_STAGGER_MS = 1500;
   const tasks = [];
-  for (let i = 0; i < submissionResults.length; i++) {
-    const result = submissionResults[i];
-    const hadSref = i >= 1 && !!srefs[i - 1];
-    if (result.status === 'fulfilled') {
-      tasks.push({ taskId: result.value, concept: job.concepts[i], genIndex: i, usedSref: hadSref });
-    } else {
-      const errMsg = result.reason?.message || 'Unknown error';
-      console.error(`[job ${job.id}] Submission failed Gen ${i + 1} "${job.concepts[i].concept}": ${errMsg}`);
-      if (hadSref) {
-        console.log(`[job ${job.id}] Retrying Gen ${i + 1} without --sref...`);
-        try {
-          const retryId = await submitMidjourneyJob(job.concepts[i].prompt, { profile: profiles[i].tag });
-          tasks.push({ taskId: retryId, concept: job.concepts[i], genIndex: i, usedSref: false });
-          job.actualSrefs[i] = null;
-          console.log(`[job ${job.id}] Gen ${i + 1} submission retry succeeded`);
-        } catch (retryErr) {
-          console.error(`[job ${job.id}] Gen ${i + 1} submission retry also failed: ${retryErr.message}`);
-        }
+
+  for (let i = 0; i < job.concepts.length; i++) {
+    const c = job.concepts[i];
+    const opts = { profile: profiles[i].tag };
+    if (i >= 1) {
+      const srefEntry = srefs[i - 1];
+      if (srefEntry) {
+        opts.sref = srefEntry.url;
+        opts.sw = STYLE_WEIGHT;
       }
+      if (i > 1 && srefs[i - 2]) {
+        await new Promise((r) => setTimeout(r, SREF_STAGGER_MS));
+      }
+    }
+    const genLabel = `job ${job.id} Gen ${i + 1}`;
+    try {
+      const { jobId, usedSref } = await submitWithSrefRetry(c.prompt, opts, genLabel);
+      tasks.push({ taskId: jobId, concept: c, genIndex: i, usedSref });
+      if (!usedSref && opts.sref) job.actualSrefs[i] = null;
+    } catch (err) {
+      console.error(`[${genLabel}] Submission failed: ${err.message}`);
     }
   }
 
@@ -828,20 +845,42 @@ async function generateAllImages(job) {
   for (let i = 0; i < gridResults.length; i++) {
     const failed = gridResults[i].status === 'rejected' ||
       (gridResults[i].status === 'fulfilled' && !gridResults[i].value?.imageUrl);
-    if (failed && tasks[i].usedSref) {
-      const gi = tasks[i].genIndex;
-      const failReason = gridResults[i].status === 'rejected'
-        ? gridResults[i].reason?.message : 'No image URL returned';
-      console.error(`[job ${job.id}] Gen ${gi + 1} failed with --sref (${failReason}). Retrying without...`);
+    if (!failed) continue;
+
+    const gi = tasks[i].genIndex;
+    const failReason = gridResults[i].status === 'rejected'
+      ? gridResults[i].reason?.message : 'No image URL returned';
+
+    if (tasks[i].usedSref) {
+      const isContentMod = /content moderation|reference image/i.test(failReason);
+      if (isContentMod) {
+        console.warn(`[job ${job.id}] Gen ${gi + 1} sref rejected during polling, retrying WITH sref after delay...`);
+        await new Promise((r) => setTimeout(r, SREF_RETRY_DELAY_MS));
+        try {
+          const srefEntry = srefs[gi - 1];
+          const retryId = await submitMidjourneyJob(tasks[i].concept.prompt, {
+            profile: profiles[gi].tag,
+            sref: srefEntry.url,
+            sw: STYLE_WEIGHT,
+          });
+          const retryGrid = await pollGridJob(retryId);
+          gridResults[i] = { status: 'fulfilled', value: retryGrid };
+          console.log(`[job ${job.id}] Gen ${gi + 1} sref retry succeeded`);
+          continue;
+        } catch (srefRetryErr) {
+          console.warn(`[job ${job.id}] Gen ${gi + 1} sref retry also failed: ${srefRetryErr.message}`);
+        }
+      }
+      console.error(`[job ${job.id}] Gen ${gi + 1} failed with --sref (${failReason}). Falling back to no-sref...`);
       try {
         const retryId = await submitMidjourneyJob(tasks[i].concept.prompt, { profile: profiles[gi].tag });
         const retryGrid = await pollGridJob(retryId);
         gridResults[i] = { status: 'fulfilled', value: retryGrid };
         tasks[i].usedSref = false;
         job.actualSrefs[gi] = null;
-        console.log(`[job ${job.id}] Gen ${gi + 1} polling retry succeeded`);
+        console.log(`[job ${job.id}] Gen ${gi + 1} no-sref fallback succeeded`);
       } catch (retryErr) {
-        console.error(`[job ${job.id}] Gen ${gi + 1} polling retry also failed: ${retryErr.message}`);
+        console.error(`[job ${job.id}] Gen ${gi + 1} no-sref fallback also failed: ${retryErr.message}`);
       }
     }
   }
