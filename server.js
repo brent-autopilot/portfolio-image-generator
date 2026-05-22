@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, statSync, unlinkSync, renameSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, statSync, unlinkSync, renameSync, rmSync, readdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { pipeline as streamPipeline } from 'stream/promises';
@@ -10,6 +10,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 import sharp from 'sharp';
 import multer from 'multer';
+import archiver from 'archiver';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -834,9 +835,11 @@ async function generateAllImages(job) {
   const gridResults = [];
   for (const r of genResults) {
     if (!r) continue;
-    tasks.push({ concept: r.concept, genIndex: r.genIndex, usedSref: r.usedSref });
+    const wantedSref = r.genIndex >= 1 && !!srefs[r.genIndex - 1];
+    const srefLost = wantedSref && !r.usedSref;
+    tasks.push({ concept: r.concept, genIndex: r.genIndex, usedSref: r.usedSref, srefLost });
     gridResults.push({ status: 'fulfilled', value: r.grid });
-    if (!r.usedSref && r.genIndex >= 1 && srefs[r.genIndex - 1]) {
+    if (srefLost) {
       job.actualSrefs[r.genIndex] = null;
     }
   }
@@ -882,6 +885,7 @@ async function generateAllImages(job) {
         profile: profiles[gi]?.tag || null,
         profileLabel: profiles[gi]?.label || null,
         srefName: tasks[i].usedSref ? (job.actualSrefs[gi] || null) : null,
+        srefLost: !!tasks[i].srefLost,
       }));
     })
   );
@@ -1390,6 +1394,23 @@ app.get('/api/sref-image/:filename', (req, res) => {
   if (!existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
   res.set('Cache-Control', 'public, max-age=31536000, immutable');
   res.type('image/jpeg').sendFile(filepath);
+});
+
+app.get('/api/sref-zip', (req, res) => {
+  const srefDir = getSrefDir();
+  const files = readdirSync(srefDir).filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f));
+  if (files.length === 0) return res.status(404).json({ error: 'No sref images found' });
+
+  res.set('Content-Type', 'application/zip');
+  res.set('Content-Disposition', 'attachment; filename="sref-images.zip"');
+
+  const archive = archiver('zip', { zlib: { level: 1 } });
+  archive.on('error', (err) => { console.error('[sref-zip]', err); res.status(500).end(); });
+  archive.pipe(res);
+  for (const f of files) {
+    archive.file(join(srefDir, f), { name: f });
+  }
+  archive.finalize();
 });
 
 app.get('/api/quadrant/:jobId/:filename', (req, res) => {
