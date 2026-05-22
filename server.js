@@ -10,7 +10,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 import sharp from 'sharp';
 import multer from 'multer';
-import archiver from 'archiver';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const archiver = require('archiver');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
