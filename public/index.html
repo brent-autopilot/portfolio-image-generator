@@ -1602,7 +1602,10 @@
     <div class="modal glass">
       <div class="modal-header">
         <span class="modal-title">Archive</span>
-        <button class="modal-close" id="modal-close">&times;</button>
+        <div style="display:flex;align-items:center;gap:12px">
+          <a id="archive-zip-btn" href="/api/archive-zip" class="sref-zip-btn">&#8595; Download All</a>
+          <button class="modal-close" id="modal-close">&times;</button>
+        </div>
       </div>
       <div id="history-content"></div>
     </div>

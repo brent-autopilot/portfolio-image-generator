@@ -1573,6 +1573,24 @@ app.get('/api/history', (_req, res) => {
   res.json(history);
 });
 
+app.get('/api/archive-zip', (_req, res) => {
+  const history = loadHistory().filter(
+    (h) => h.filename && existsSync(join(ARCHIVE_DIR, h.filename))
+  );
+  if (history.length === 0) return res.status(404).json({ error: 'No archived images found' });
+
+  res.set('Content-Type', 'application/zip');
+  res.set('Content-Disposition', 'attachment; filename="archive-all-images.zip"');
+
+  const archive = archiver('zip', { zlib: { level: 1 } });
+  archive.on('error', (err) => { console.error('[archive-zip]', err); res.status(500).end(); });
+  archive.pipe(res);
+  for (const h of history) {
+    archive.file(join(ARCHIVE_DIR, h.filename), { name: h.filename });
+  }
+  archive.finalize();
+});
+
 app.get('/api/archive/:filename', (req, res) => {
   const requested = req.params.filename;
   const safe = basename(requested);
