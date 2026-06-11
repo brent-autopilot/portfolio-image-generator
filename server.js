@@ -94,11 +94,29 @@ app.get('/api/settings/auth/check', (req, res) => {
 // Serve static files (login page is always accessible)
 app.use(express.static(join(__dirname, 'public')));
 
+// LegNext webhook — must be unauthenticated (called by LegNext servers)
+app.post('/api/mj-callback', (req, res) => {
+  const data = req.body || {};
+  const mjJobId = data.job_id;
+  if (!mjJobId) return res.status(400).json({ error: 'missing job_id' });
+
+  const pending = mjPendingCallbacks.get(mjJobId);
+  if (pending) {
+    if (data.status === 'completed') {
+      pending.resolve(parseGridOutput(data, mjJobId));
+    } else if (data.status === 'failed') {
+      pending.reject(new Error(data.error?.message || 'Midjourney task failed'));
+    }
+  }
+  res.json({ ok: true });
+});
+
 // Protect all other API routes
 app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth')) return next();
   if (req.path.startsWith('/settings/auth')) return next();
   if (req.path.startsWith('/sref-image/')) return next();
+  if (req.path === '/mj-callback') return next();
   if (req.path.startsWith('/settings/')) {
     if (!isSettingsAuthed(req)) return res.status(401).json({ error: 'Unauthorized' });
     return next();
@@ -121,6 +139,58 @@ const JOB_TTL_MS = 30 * 60 * 1000;
 const JOB_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_POLL_ATTEMPTS = 60;
 const POLL_INTERVAL_MS = 3000;
+
+function getPublicBaseUrl() {
+  const rpd = process.env.RAILWAY_PUBLIC_DOMAIN;
+  return rpd ? `https://${rpd}` : null;
+}
+
+// LegNext webhook completions keyed by Midjourney job_id
+const mjPendingCallbacks = new Map();
+
+// SSE subscribers keyed by pipeline job id
+const jobSubscribers = new Map();
+
+function serializeJobPayload(job) {
+  return {
+    jobId: job.id,
+    stage: job.stage,
+    fundName: job.fundName,
+    fundThesis: job.fundThesis,
+    bypassMode: job.bypassMode,
+    assignedStyles: job.assignedStyles,
+    assignedInterpretations: job.assignedInterpretations,
+    assignedProfiles: job.assignedProfiles,
+    actualSrefs: job.actualSrefs,
+    profileTags: job.profileTags,
+    genRatings: job.genRatings || {},
+    concepts: job.concepts,
+    mjTaskIds: job.mjTaskIds,
+    rawImages: job.rawImages,
+    rawImageCount: job.rawImages.length,
+    approvedCount: job.approvedImages.length,
+    rejectedCount: job.rejectedImages.length,
+    error: job.error,
+  };
+}
+
+function emitJobUpdate(job) {
+  const subs = jobSubscribers.get(job.id);
+  if (!subs?.size) return;
+  const payload = `data: ${JSON.stringify(serializeJobPayload(job))}\n\n`;
+  for (const res of subs) {
+    try {
+      res.write(payload);
+    } catch {
+      subs.delete(res);
+    }
+  }
+}
+
+function setJobStage(job, stage) {
+  job.stage = stage;
+  emitJobUpdate(job);
+}
 
 // ---------------------------------------------------------------------------
 // Lazy Anthropic client — initialized on first use so env vars are resolved
@@ -418,7 +488,7 @@ pruneTimer.unref();
 // Stage 1 — Claude Sonnet: generate 3 distinct 15-word image prompts
 // ---------------------------------------------------------------------------
 async function generateThemes(job) {
-  job.stage = 'generating_theme';
+  setJobStage(job, 'generating_theme');
 
   const styleContext = job.styleJson
     ? `\n\nUse this visual style JSON for atmospheric tone only:\n${JSON.stringify(job.styleJson, null, 2)}`
@@ -600,7 +670,7 @@ Return ONLY the JSON array, no other text.`;
 // ---------------------------------------------------------------------------
 // Stage 2 — LegNext.ai / Midjourney
 // ---------------------------------------------------------------------------
-const SREF_MAX_RETRIES = 3;
+const SREF_MAX_RETRIES = 2;
 
 async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = null } = {}) {
   const apiKey = process.env.LEGNEXT_API_KEY;
@@ -611,13 +681,19 @@ async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = n
   const fullPrompt = `${prompt}${profileSuffix}${srefSuffix}`;
   console.log(`[midjourney] Submitting prompt (${fullPrompt.length} chars): ${fullPrompt.slice(0, 300)}...`);
 
+  const body = { text: fullPrompt };
+  const callbackBase = getPublicBaseUrl();
+  if (callbackBase) {
+    body.callback = `${callbackBase}/api/mj-callback`;
+  }
+
   const res = await fetch(`${LEGNEXT_BASE}/diffusion`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
     },
-    body: JSON.stringify({ text: fullPrompt }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -645,8 +721,8 @@ async function submitAndPollWithSrefRetry(prompt, opts, label) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const jobId = await submitMidjourneyJob(prompt, opts);
-      const grid = await pollGridJob(jobId);
-      if (!grid.imageUrl) throw new Error('No image URL returned');
+      const grid = await waitForGridJob(jobId);
+      if (!grid.imageUrl && !(grid.imageUrls?.length)) throw new Error('No image URL returned');
       return { grid, usedSref: hasSref };
     } catch (err) {
       if (hasSref && isSrefModerationError(err.message) && attempt < maxAttempts) {
@@ -657,7 +733,7 @@ async function submitAndPollWithSrefRetry(prompt, opts, label) {
         console.warn(`[${label}] Sref failed ${maxAttempts}x, falling back to no-sref`);
         const noSrefOpts = { ...opts, sref: null, sw: null };
         const jobId = await submitMidjourneyJob(prompt, noSrefOpts);
-        const grid = await pollGridJob(jobId);
+        const grid = await waitForGridJob(jobId);
         return { grid, usedSref: false };
       }
       throw err;
@@ -701,14 +777,20 @@ async function submitUpscale(jobId, imageNo = 0) {
   return data.job_id;
 }
 
+function parseGridOutput(result, mjJobId) {
+  const jobId = mjJobId || result.job_id;
+  const imageUrl = result.output?.image_url || (result.output?.image_urls?.[0]) || null;
+  const imageUrls = result.output?.image_urls || [];
+  return { jobId, imageUrl, imageUrls };
+}
+
 async function pollGridJob(jobId) {
   for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     const result = await fetchMidjourneyResult(jobId);
 
     if (result.status === 'completed') {
-      const imageUrl = result.output?.image_url || (result.output?.image_urls?.[0]) || null;
-      return { jobId, imageUrl };
+      return parseGridOutput(result, jobId);
     }
 
     if (result.status === 'failed') {
@@ -717,6 +799,42 @@ async function pollGridJob(jobId) {
   }
 
   throw new Error('Midjourney task timed out after polling');
+}
+
+async function waitForGridJob(mjJobId) {
+  try {
+    const result = await fetchMidjourneyResult(mjJobId);
+    if (result.status === 'completed') return parseGridOutput(result, mjJobId);
+    if (result.status === 'failed') {
+      throw new Error(result.error?.message || 'Midjourney task failed');
+    }
+  } catch (err) {
+    if (/Midjourney task failed/i.test(err.message || '')) throw err;
+  }
+
+  const callbackBase = getPublicBaseUrl();
+  if (!callbackBase) return pollGridJob(mjJobId);
+
+  return new Promise((resolve, reject) => {
+    const timeoutMs = MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS;
+    const timeout = setTimeout(() => {
+      mjPendingCallbacks.delete(mjJobId);
+      pollGridJob(mjJobId).then(resolve).catch(reject);
+    }, timeoutMs);
+
+    mjPendingCallbacks.set(mjJobId, {
+      resolve: (grid) => {
+        clearTimeout(timeout);
+        mjPendingCallbacks.delete(mjJobId);
+        resolve(grid);
+      },
+      reject: (err) => {
+        clearTimeout(timeout);
+        mjPendingCallbacks.delete(mjJobId);
+        reject(err);
+      },
+    });
+  });
 }
 
 async function pollUpscaleJob(jobId) {
@@ -774,8 +892,65 @@ async function cropGridToQuadrants(gridUrl, jobId, gridIndex) {
   return files;
 }
 
-async function generateAllImages(job) {
-  job.stage = 'generating_images';
+function mapQuadrantImages(imageUrls, grid, task, profiles, job, gridIndex) {
+  const { jobId: gridJobId, imageUrl } = grid;
+  const concept = task.concept;
+  const gi = task.genIndex;
+  return imageUrls.slice(0, 4).map((url, q) => ({
+    url,
+    gridUrl: imageUrl,
+    gridJobId,
+    imageNo: q,
+    quadrantFile: null,
+    upscaled: false,
+    concept: concept.concept,
+    prompt: concept.prompt,
+    style: concept.style || null,
+    interpretation: concept.interpretation || null,
+    genIndex: gi,
+    profile: profiles[gi]?.tag || null,
+    profileLabel: profiles[gi]?.label || null,
+    srefName: task.usedSref ? (job.actualSrefs[gi] || null) : null,
+    srefLost: !!task.srefLost,
+  }));
+}
+
+async function buildImagesFromGenResult(grid, task, gridIndex, profiles, job) {
+  const { imageUrl, imageUrls } = grid;
+
+  if (imageUrls?.length >= 4) {
+    console.log(`[job ${job.id}] Using LegNext image_urls for Gen ${task.genIndex + 1}`);
+    return mapQuadrantImages(imageUrls, grid, task, profiles, job, gridIndex);
+  }
+
+  if (!imageUrl) {
+    console.error(`[job ${job.id}] No image URL for grid "${task.concept.concept}"`);
+    return [];
+  }
+
+  console.warn(`[job ${job.id}] image_urls missing for Gen ${task.genIndex + 1}, falling back to grid crop`);
+  const quadrantFiles = await cropGridToQuadrants(imageUrl, job.id, gridIndex);
+  return quadrantFiles.map((qf, q) => ({
+    url: `/api/quadrant/${job.id}/${qf}`,
+    gridUrl: imageUrl,
+    gridJobId: grid.jobId,
+    imageNo: q,
+    quadrantFile: qf,
+    upscaled: false,
+    concept: task.concept.concept,
+    prompt: task.concept.prompt,
+    style: task.concept.style || null,
+    interpretation: task.concept.interpretation || null,
+    genIndex: task.genIndex,
+    profile: profiles[task.genIndex]?.tag || null,
+    profileLabel: profiles[task.genIndex]?.label || null,
+    srefName: task.usedSref ? (job.actualSrefs[task.genIndex] || null) : null,
+    srefLost: !!task.srefLost,
+  }));
+}
+
+async function generateAllImages(job, { onGenComplete } = {}) {
+  setJobStage(job, 'generating_images');
 
   const profiles = pickRandomProfiles(NUM_CONCEPTS);
   const rpd = process.env.RAILWAY_PUBLIC_DOMAIN;
@@ -811,6 +986,34 @@ async function generateAllImages(job) {
   // Each gen runs submit→poll as a unit. Sref jobs get up to SREF_MAX_RETRIES
   // resubmissions on moderation rejects before falling back to no-sref.
   // Gen 1 has no sref so it runs in parallel with Gen 2 & 3.
+  let gridIndexCounter = 0;
+  let completedGens = 0;
+
+  const processGenResult = async (r) => {
+    if (!r) return [];
+
+    const wantedSref = r.genIndex >= 1 && !!srefs[r.genIndex - 1];
+    const srefLost = wantedSref && !r.usedSref;
+    if (srefLost) job.actualSrefs[r.genIndex] = null;
+
+    const task = {
+      concept: r.concept,
+      genIndex: r.genIndex,
+      usedSref: r.usedSref,
+      srefLost,
+    };
+
+    const gridIdx = gridIndexCounter++;
+    const images = await buildImagesFromGenResult(r.grid, task, gridIdx, profiles, job);
+    completedGens++;
+
+    if (onGenComplete && images.length > 0) {
+      await onGenComplete(images);
+    }
+
+    return images;
+  };
+
   const genPromises = job.concepts.map((c, i) => {
     const opts = { profile: profiles[i].tag };
     if (i >= 1) {
@@ -822,92 +1025,31 @@ async function generateAllImages(job) {
     }
     const label = `job ${job.id} Gen ${i + 1}`;
     return submitAndPollWithSrefRetry(c.prompt, opts, label)
-      .then((r) => ({ ...r, concept: c, genIndex: i }))
+      .then((result) => ({ ...result, concept: c, genIndex: i }))
       .catch((err) => {
         console.error(`[${label}] Failed entirely: ${err.message}`);
         return null;
-      });
+      })
+      .then(processGenResult);
   });
 
-  const genResults = await Promise.all(genPromises);
+  const genImageBatches = await Promise.all(genPromises);
+  const allImages = genImageBatches.flat();
 
-  const tasks = [];
-  const gridResults = [];
-  for (const r of genResults) {
-    if (!r) continue;
-    const wantedSref = r.genIndex >= 1 && !!srefs[r.genIndex - 1];
-    const srefLost = wantedSref && !r.usedSref;
-    tasks.push({ concept: r.concept, genIndex: r.genIndex, usedSref: r.usedSref, srefLost });
-    gridResults.push({ status: 'fulfilled', value: r.grid });
-    if (srefLost) {
-      job.actualSrefs[r.genIndex] = null;
-    }
-  }
+  job.mjTaskIds = job.concepts.map((c) => c.prompt?.slice(0, 40) || 'unknown');
+  console.log(`[job ${job.id}] ${completedGens}/${job.concepts.length} grids complete, ${allImages.length} images`);
 
-  job.mjTaskIds = tasks.map((t) => t.concept?.prompt?.slice(0, 40) || 'unknown');
-  console.log(`[job ${job.id}] ${tasks.length}/${job.concepts.length} grids complete`);
-
-  if (tasks.length === 0) {
-    throw new Error('All Midjourney generations failed');
-  }
-
-  console.log(`[job ${job.id}] Cropping quadrants...`);
-
-  const cropResults = await Promise.allSettled(
-    gridResults.map(async (gr, i) => {
-      if (gr.status === 'rejected') {
-        console.error(`[job ${job.id}] Grid poll failed for Gen ${tasks[i].genIndex + 1} "${tasks[i].concept.concept}": ${gr.reason?.message}`);
-        return [];
-      }
-
-      const { jobId: gridJobId, imageUrl } = gr.value;
-      const concept = tasks[i].concept;
-
-      if (!imageUrl) {
-        console.error(`[job ${job.id}] No image URL for grid "${concept.concept}"`);
-        return [];
-      }
-
-      const gi = tasks[i].genIndex;
-      const quadrantFiles = await cropGridToQuadrants(imageUrl, job.id, i);
-      return quadrantFiles.map((qf, q) => ({
-        url: `/api/quadrant/${job.id}/${qf}`,
-        gridUrl: imageUrl,
-        gridJobId,
-        imageNo: q,
-        quadrantFile: qf,
-        upscaled: false,
-        concept: concept.concept,
-        prompt: concept.prompt,
-        style: concept.style || null,
-        interpretation: concept.interpretation || null,
-        genIndex: gi,
-        profile: profiles[gi]?.tag || null,
-        profileLabel: profiles[gi]?.label || null,
-        srefName: tasks[i].usedSref ? (job.actualSrefs[gi] || null) : null,
-        srefLost: !!tasks[i].srefLost,
-      }));
-    })
-  );
-
-  const allImages = [];
-  for (const cr of cropResults) {
-    if (cr.status === 'fulfilled') {
-      allImages.push(...cr.value);
-    } else {
-      console.error(`[job ${job.id}] Crop failed:`, cr.reason?.message);
-    }
-  }
-  allImages.forEach((img, idx) => { img.rawIndex = idx; });
-
-  job.rawImages = allImages;
-
-  if (job.rawImages.length === 0) {
+  if (allImages.length === 0) {
     throw new Error('All Midjourney image generations failed');
   }
 
-  console.log(`[job ${job.id}] Cropped ${job.rawImages.length} individual images`);
-  return job.rawImages;
+  if (!onGenComplete) {
+    allImages.forEach((img, idx) => { img.rawIndex = idx; });
+    job.rawImages = allImages;
+  }
+
+  console.log(`[job ${job.id}] Prepared ${allImages.length} individual images`);
+  return allImages;
 }
 
 // ---------------------------------------------------------------------------
@@ -974,20 +1116,7 @@ async function qcOneImage(img, jobId, clogPrompt) {
   return { ...img, verdict, ...(verdict === 'ERROR' ? { reason } : {}) };
 }
 
-async function runClogCheck(job) {
-  const clogPrompt = loadClogPrompt();
-  if (!clogPrompt) {
-    job.stage = 'complete';
-    job.approvedImages = job.rawImages.map((img) => ({
-      ...img,
-      verdict: 'skipped',
-    }));
-    return;
-  }
-
-  job.stage = 'qc_check';
-
-  const images = [...job.rawImages];
+async function runQcForImages(job, images, clogPrompt) {
   const results = [];
   for (let i = 0; i < images.length; i += QC_CONCURRENCY) {
     const batch = images.slice(i, i + QC_CONCURRENCY);
@@ -997,9 +1126,11 @@ async function runClogCheck(job) {
     results.push(...batchResults);
   }
 
-  job.approvedImages = results.filter((r) => r.verdict === 'PASS');
-  job.rejectedImages = results.filter((r) => r.verdict !== 'PASS');
-  job.stage = 'complete';
+  for (const r of results) {
+    if (r.verdict === 'PASS') job.approvedImages.push(r);
+    else job.rejectedImages.push(r);
+  }
+  emitJobUpdate(job);
 }
 
 // ---------------------------------------------------------------------------
@@ -1008,27 +1139,57 @@ async function runClogCheck(job) {
 async function runPipeline(job) {
   try {
     await generateThemes(job);
-    await generateAllImages(job);
-    job.stage = 'images_ready';
-    runQcInBackground(job);
-  } catch (err) {
-    job.stage = 'error';
-    job.error = err.message;
-    console.error(`[job ${job.id}] Pipeline error:`, err);
-  }
-}
+    emitJobUpdate(job);
 
-async function runQcInBackground(job) {
-  try {
-    await runClogCheck(job);
+    const clogPrompt = loadClogPrompt();
+    const qcPromises = [];
+    let firstGen = true;
+
+    await generateAllImages(job, {
+      onGenComplete: async (images) => {
+        const startIdx = job.rawImages.length;
+        images.forEach((img, i) => { img.rawIndex = startIdx + i; });
+        job.rawImages.push(...images);
+
+        if (firstGen) {
+          setJobStage(job, 'images_ready');
+          firstGen = false;
+        } else {
+          emitJobUpdate(job);
+        }
+
+        if (clogPrompt) {
+          setJobStage(job, 'qc_check');
+          qcPromises.push(
+            runQcForImages(job, images, clogPrompt).catch((err) => {
+              console.error(`[job ${job.id}] QC error for gen batch:`, err.message);
+              for (const img of images) {
+                job.approvedImages.push({ ...img, verdict: 'skipped' });
+              }
+              emitJobUpdate(job);
+            })
+          );
+        } else {
+          for (const img of images) {
+            job.approvedImages.push({ ...img, verdict: 'skipped' });
+          }
+          emitJobUpdate(job);
+        }
+      },
+    });
+
+    if (clogPrompt) {
+      await Promise.all(qcPromises);
+    }
+
+    setJobStage(job, 'complete');
     archiveJobImages(job).catch((err) =>
       console.error(`[job ${job.id}] Archive error:`, err.message)
     );
   } catch (err) {
-    console.error(`[job ${job.id}] QC error:`, err.message);
-    job.approvedImages = job.rawImages.map((img) => ({ ...img, verdict: 'skipped' }));
-    job.rejectedImages = [];
-    job.stage = 'complete';
+    setJobStage(job, 'error');
+    job.error = err.message;
+    console.error(`[job ${job.id}] Pipeline error:`, err);
   }
 }
 
@@ -1063,26 +1224,35 @@ app.post('/api/generate', (req, res) => {
 app.get('/api/status/:jobId', (req, res) => {
   const job = jobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.json(serializeJobPayload(job));
+});
 
-  res.json({
-    jobId: job.id,
-    stage: job.stage,
-    fundName: job.fundName,
-    fundThesis: job.fundThesis,
-    bypassMode: job.bypassMode,
-    assignedStyles: job.assignedStyles,
-    assignedInterpretations: job.assignedInterpretations,
-    assignedProfiles: job.assignedProfiles,
-    actualSrefs: job.actualSrefs,
-    profileTags: job.profileTags,
-    genRatings: job.genRatings || {},
-    concepts: job.concepts,
-    mjTaskIds: job.mjTaskIds,
-    rawImages: job.rawImages,
-    rawImageCount: job.rawImages.length,
-    approvedCount: job.approvedImages.length,
-    rejectedCount: job.rejectedImages.length,
-    error: job.error,
+app.get('/api/events/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  if (!jobSubscribers.has(job.id)) jobSubscribers.set(job.id, new Set());
+  jobSubscribers.get(job.id).add(res);
+
+  res.write(`data: ${JSON.stringify(serializeJobPayload(job))}\n\n`);
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    jobSubscribers.get(job.id)?.delete(res);
+    if (jobSubscribers.get(job.id)?.size === 0) jobSubscribers.delete(job.id);
   });
 });
 

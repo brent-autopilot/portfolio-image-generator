@@ -2285,7 +2285,7 @@
         if (res.status === 401) { location.reload(); return; }
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
-        await pollJob(data.jobId);
+        await watchJob(data.jobId);
       } catch (err) {
         errorDisplay.classList.remove('hidden');
         errorText.textContent = err.message;
@@ -2298,6 +2298,85 @@
     }
 
     const MAX_POLL_ITERATIONS = 300;
+
+    function renderConceptsPreview(status) {
+      if (!status.concepts?.length) return;
+      conceptsPreview.classList.remove('hidden');
+      const bm = status.bypassMode || 'normal';
+      const showStyle = bm === 'normal' || bm === 'skip-interp';
+      const showInterp = bm === 'normal' || bm === 'skip-style';
+      const showBypassBadge = bm === 'full-bypass';
+      conceptsList.innerHTML = status.concepts.map((c, i) => {
+        const style = showStyle ? (c.style || status.assignedStyles?.[i] || '') : '';
+        const interp = showInterp ? (c.interpretation || status.assignedInterpretations?.[i] || '') : '';
+        return `<div class="concept-row">
+          <span class="concept-num">${String(i+1).padStart(2,'0')}</span>
+          <span class="concept-label">${esc(c.concept)}</span>
+          ${showBypassBadge ? '<span class="concept-style" style="color:var(--text-dim);background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1)">BYPASS</span>' : ''}
+          ${style ? `<span class="concept-style">${esc(style)}</span>` : ''}
+          ${interp ? `<span class="concept-interp">${esc(interp)}</span>` : ''}
+          <span class="concept-prompt">${esc(c.prompt)}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function renderPartialGallery(status) {
+      if (!status.rawImages?.length) return;
+      const showGalleryStages = ['generating_images', 'images_ready', 'qc_check'];
+      if (!showGalleryStages.includes(status.stage)) return;
+      gallerySection.classList.remove('hidden');
+      renderGalleryWithRatings(
+        galleryScatter,
+        status.rawImages.map((img) => ({ ...img, verdict: null })),
+        status.genRatings
+      );
+    }
+
+    async function fetchAndShowResults(jobId) {
+      let results;
+      try {
+        const resultsRes = await fetch(`/api/results/${jobId}`);
+        if (resultsRes.status === 401) { location.reload(); return 'auth'; }
+        if (!resultsRes.ok) throw new Error(`Server returned ${resultsRes.status}`);
+        results = await resultsRes.json();
+      } catch (err) {
+        errorDisplay.classList.remove('hidden');
+        errorText.textContent = `Failed to fetch results: ${err.message}`;
+        return 'error';
+      }
+
+      const allImages = [
+        ...(results.approvedImages || []),
+        ...(results.rejectedImages || []),
+      ];
+
+      if (allImages.length > 0) {
+        gallerySection.classList.remove('hidden');
+        renderGalleryWithRatings(galleryScatter, allImages, results.genRatings);
+      }
+
+      if (!results.approvedImages?.length && results.rejectedImages?.length) {
+        errorDisplay.classList.remove('hidden');
+        errorText.textContent = 'All images were rejected by QC. Try again.';
+      }
+      return 'done';
+    }
+
+    function handleJobStatus(status) {
+      updateStages(status.stage);
+      renderConceptsPreview(status);
+
+      if (status.stage === 'error') {
+        errorDisplay.classList.remove('hidden');
+        errorText.textContent = status.error || 'An unknown error occurred';
+        return 'error';
+      }
+
+      renderPartialGallery(status);
+
+      if (status.stage === 'complete') return 'complete';
+      return 'continue';
+    }
 
     async function pollJob(jobId) {
       _currentJobId = jobId;
@@ -2315,68 +2394,10 @@
           continue;
         }
 
-        updateStages(status.stage);
-
-        if (status.concepts?.length > 0 && conceptsPreview.classList.contains('hidden')) {
-          conceptsPreview.classList.remove('hidden');
-          const bm = status.bypassMode || 'normal';
-          const showStyle = bm === 'normal' || bm === 'skip-interp';
-          const showInterp = bm === 'normal' || bm === 'skip-style';
-          const showBypassBadge = bm === 'full-bypass';
-          conceptsList.innerHTML = status.concepts.map((c, i) => {
-            const style = showStyle ? (c.style || status.assignedStyles?.[i] || '') : '';
-            const interp = showInterp ? (c.interpretation || status.assignedInterpretations?.[i] || '') : '';
-            return `<div class="concept-row">
-              <span class="concept-num">${String(i+1).padStart(2,'0')}</span>
-              <span class="concept-label">${esc(c.concept)}</span>
-              ${showBypassBadge ? '<span class="concept-style" style="color:var(--text-dim);background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1)">BYPASS</span>' : ''}
-              ${style ? `<span class="concept-style">${esc(style)}</span>` : ''}
-              ${interp ? `<span class="concept-interp">${esc(interp)}</span>` : ''}
-              <span class="concept-prompt">${esc(c.prompt)}</span>
-            </div>`;
-          }).join('');
-        }
-
-        if (status.stage === 'error') {
-          errorDisplay.classList.remove('hidden');
-          errorText.textContent = status.error || 'An unknown error occurred';
-          return;
-        }
-
-        if ((status.stage === 'images_ready' || status.stage === 'qc_check') && gallerySection.classList.contains('hidden')) {
-          if (status.rawImages?.length > 0) {
-            gallerySection.classList.remove('hidden');
-            renderGalleryWithRatings(galleryScatter, status.rawImages.map((img) => ({ ...img, verdict: null })), status.genRatings);
-          }
-        }
-
-        if (status.stage === 'complete') {
-          let results;
-          try {
-            const resultsRes = await fetch(`/api/results/${jobId}`);
-            if (resultsRes.status === 401) { location.reload(); return; }
-            if (!resultsRes.ok) throw new Error(`Server returned ${resultsRes.status}`);
-            results = await resultsRes.json();
-          } catch (err) {
-            errorDisplay.classList.remove('hidden');
-            errorText.textContent = `Failed to fetch results: ${err.message}`;
-            return;
-          }
-
-          const allImages = [
-            ...(results.approvedImages || []),
-            ...(results.rejectedImages || []),
-          ];
-
-          if (allImages.length > 0) {
-            gallerySection.classList.remove('hidden');
-            renderGalleryWithRatings(galleryScatter, allImages, results.genRatings);
-          }
-
-          if (!results.approvedImages?.length && results.rejectedImages?.length) {
-            errorDisplay.classList.remove('hidden');
-            errorText.textContent = 'All images were rejected by QC. Try again.';
-          }
+        const outcome = handleJobStatus(status);
+        if (outcome === 'error') return;
+        if (outcome === 'complete') {
+          await fetchAndShowResults(jobId);
           return;
         }
       }
@@ -2384,6 +2405,48 @@
       errorDisplay.classList.remove('hidden');
       errorText.textContent = 'Polling timed out — job may still be running on the server.';
       updateStages('error');
+    }
+
+    function watchJob(jobId) {
+      _currentJobId = jobId;
+
+      if (typeof EventSource === 'undefined') {
+        return pollJob(jobId);
+      }
+
+      return new Promise((resolve) => {
+        let finished = false;
+        const es = new EventSource(`/api/events/${jobId}`);
+
+        es.onmessage = async (ev) => {
+          let status;
+          try {
+            status = JSON.parse(ev.data);
+          } catch {
+            return;
+          }
+
+          const outcome = handleJobStatus(status);
+          if (outcome === 'error') {
+            finished = true;
+            es.close();
+            resolve();
+            return;
+          }
+          if (outcome === 'complete') {
+            finished = true;
+            es.close();
+            await fetchAndShowResults(jobId);
+            resolve();
+          }
+        };
+
+        es.onerror = () => {
+          if (finished) return;
+          es.close();
+          pollJob(jobId).then(resolve);
+        };
+      });
     }
 
     // History modal
