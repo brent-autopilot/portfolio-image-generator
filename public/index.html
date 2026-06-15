@@ -2325,9 +2325,19 @@
       const showGalleryStages = ['generating_images', 'images_ready', 'qc_check'];
       if (!showGalleryStages.includes(status.stage)) return;
       gallerySection.classList.remove('hidden');
+
+      const verdictByKey = new Map();
+      for (const img of [...(status.approvedImages || []), ...(status.rejectedImages || [])]) {
+        const key = img.rawIndex ?? img.url;
+        if (key != null) verdictByKey.set(key, img.verdict);
+      }
+
       renderGalleryWithRatings(
         galleryScatter,
-        status.rawImages.map((img) => ({ ...img, verdict: null })),
+        status.rawImages.map((img) => ({
+          ...img,
+          verdict: verdictByKey.get(img.rawIndex ?? img.url) ?? img.verdict ?? null,
+        })),
         status.genRatings
       );
     }
@@ -2373,6 +2383,15 @@
       }
 
       renderPartialGallery(status);
+
+      if (status.warnings?.length) {
+        errorDisplay.classList.remove('hidden');
+        errorText.textContent = status.warnings.join(' ');
+        errorDisplay.dataset.warning = 'true';
+      } else if (errorDisplay.dataset.warning === 'true' && status.stage !== 'error') {
+        errorDisplay.classList.add('hidden');
+        delete errorDisplay.dataset.warning;
+      }
 
       if (status.stage === 'complete') return 'complete';
       return 'continue';

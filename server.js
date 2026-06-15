@@ -12,6 +12,9 @@ import sharp from 'sharp';
 import multer from 'multer';
 import { ZipArchive } from 'archiver';
 import { validateConcepts, buildKeywordList } from './lib/anchor-validation.js';
+import { parseJsonObjectFromClaude, parseJsonArrayFromClaude } from './lib/parse-claude-json.js';
+import { sanitizeLockedAnchor } from './lib/fund-anchor-hints.js';
+import { normalizeClogVerdict, normalizeLiteralVerdict } from './lib/qc-verdict.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -172,6 +175,9 @@ function serializeJobPayload(job) {
     rawImageCount: job.rawImages.length,
     approvedCount: job.approvedImages.length,
     rejectedCount: job.rejectedImages.length,
+    approvedImages: job.approvedImages,
+    rejectedImages: job.rejectedImages,
+    warnings: job.warnings || [],
     error: job.error,
   };
 }
@@ -426,8 +432,10 @@ function loadClogPrompt() {
   try {
     const raw = readFileSync(join(__dirname, 'prompts', 'clog-qc.md'), 'utf-8');
     if (raw.startsWith('# PLACEHOLDER')) return null;
-    if (raw.trim().length < 100) return null;
-    return raw;
+    const sectionStart = raw.indexOf('## SECTION 1');
+    const body = sectionStart >= 0 ? raw.slice(sectionStart) : raw;
+    if (body.trim().length < 100) return null;
+    return body.trim();
   } catch {
     return null;
   }
@@ -464,6 +472,7 @@ function createJob(fundName, fundThesis, styleJson, bypassMode = 'normal') {
     approvedImages: [],
     rejectedImages: [],
     lockedAnchor: null,
+    warnings: [],
     error: null,
     createdAt: Date.now(),
   };
@@ -493,57 +502,60 @@ pruneTimer.unref();
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 const THEME_MODEL = CLAUDE_MODEL;
 
-function parseJsonFromClaude(raw) {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/) || raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-  try {
-    return JSON.parse(jsonMatch[0]);
-  } catch {
-    return null;
-  }
-}
-
 async function extractLockedAnchor(job, thesis) {
-  const resp = await getAnthropic().messages.create({
-    model: THEME_MODEL,
-    max_tokens: 256,
-    system: `You identify the single most obvious LITERAL visual subject from a fund name. Return only JSON.`,
-    messages: [{
-      role: 'user',
-      content: `Fund name: "${job.fundName}"
+  const userContent = `Fund name: "${job.fundName}"
 Thesis: "${thesis}"
 
 What is the obvious literal visual subject a normal person pictures? Not abstract concepts, not financial metaphors.
 
 Examples:
-- "Rain Check Capital" → umbrella, rain
+- "Rain Check Capital" → umbrella, rain (weather protection — NOT a rain-check ticket or coupon)
 - "Umbrella Trading" → umbrella
 - "Silver Fund" → silver metal
 
-Return ONLY JSON:
+Return ONLY JSON with no markdown fences:
 {
   "noun": "2-4 word anchor phrase",
   "keywords": ["word1", "word2"]
 }
 
-keywords must be concrete nouns that must appear in image prompts (include plural/singular variants if helpful).`,
-    }],
-  });
+keywords must be concrete nouns that must appear in image prompts (include plural/singular variants if helpful).`;
 
-  const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  const parsed = parseJsonFromClaude(raw);
-  if (!parsed?.noun || typeof parsed.noun !== 'string') {
-    throw new Error(`Failed to extract locked anchor. Raw: ${raw.slice(0, 200)}`);
+  let lastRaw = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const resp = await getAnthropic().messages.create({
+      model: THEME_MODEL,
+      max_tokens: 256,
+      system: `You identify the single most obvious LITERAL visual subject from a fund name. Return only JSON.`,
+      messages: [{ role: 'user', content: userContent }],
+    });
+
+    lastRaw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const parsed = parseJsonObjectFromClaude(lastRaw);
+    if (!parsed?.noun || typeof parsed.noun !== 'string') {
+      console.warn(`[job ${job.id}] Anchor parse failed (attempt ${attempt + 1})`);
+      continue;
+    }
+
+    const keywords = Array.isArray(parsed.keywords)
+      ? parsed.keywords.filter((k) => typeof k === 'string' && k.trim())
+      : [];
+
+    const sanitized = sanitizeLockedAnchor(job.fundName, {
+      noun: parsed.noun.trim(),
+      keywords,
+    });
+    if (sanitized.corrected) {
+      console.warn(`[job ${job.id}] ${sanitized.reason}`);
+    }
+
+    const locked = { noun: sanitized.noun, keywords: sanitized.keywords };
+    job.lockedAnchor = locked;
+    console.log(`[job ${job.id}] Locked anchor: "${locked.noun}" keywords=[${buildKeywordList(locked.noun, locked.keywords).join(', ')}]`);
+    return locked;
   }
 
-  const keywords = Array.isArray(parsed.keywords)
-    ? parsed.keywords.filter((k) => typeof k === 'string' && k.trim())
-    : [];
-
-  const locked = { noun: parsed.noun.trim(), keywords };
-  job.lockedAnchor = locked;
-  console.log(`[job ${job.id}] Locked anchor: "${locked.noun}" keywords=[${buildKeywordList(locked.noun, locked.keywords).join(', ')}]`);
-  return locked;
+  throw new Error(`Failed to extract locked anchor after retry. Raw: ${lastRaw.slice(0, 200)}`);
 }
 
 function buildDirectivesParagraph(mode, styles, interpretations) {
@@ -636,7 +648,7 @@ async function callClaudeForConcepts(systemPrompt, userMessage) {
   });
 
   const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  const concepts = parseJsonFromClaude(raw);
+  const concepts = parseJsonArrayFromClaude(raw);
   if (!Array.isArray(concepts)) {
     throw new Error(`Failed to parse Claude concepts JSON: ${raw.slice(0, 200)}`);
   }
@@ -697,7 +709,10 @@ async function generateThemes(job) {
       throw new Error('Claude returned no valid concepts');
     }
 
-    const validation = validateConcepts(lockedAnchor, concepts);
+    const validation = validateConcepts(lockedAnchor, concepts, {
+      expectedCount: NUM_CONCEPTS,
+      requireAnchorField: true,
+    });
     if (validation.valid) {
       valid = concepts;
       if (attempt > 0) {
@@ -859,6 +874,47 @@ async function pollGridJob(jobId) {
 }
 
 async function waitForGridJob(mjJobId) {
+  const callbackBase = getPublicBaseUrl();
+
+  if (callbackBase) {
+    return new Promise((resolve, reject) => {
+      const timeoutMs = MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS;
+      const timeout = setTimeout(() => {
+        mjPendingCallbacks.delete(mjJobId);
+        pollGridJob(mjJobId).then(resolve).catch(reject);
+      }, timeoutMs);
+
+      mjPendingCallbacks.set(mjJobId, {
+        resolve: (grid) => {
+          clearTimeout(timeout);
+          mjPendingCallbacks.delete(mjJobId);
+          resolve(grid);
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          mjPendingCallbacks.delete(mjJobId);
+          reject(err);
+        },
+      });
+
+      fetchMidjourneyResult(mjJobId)
+        .then((result) => {
+          if (result.status === 'completed') {
+            clearTimeout(timeout);
+            mjPendingCallbacks.delete(mjJobId);
+            resolve(parseGridOutput(result, mjJobId));
+          } else if (result.status === 'failed') {
+            clearTimeout(timeout);
+            mjPendingCallbacks.delete(mjJobId);
+            reject(new Error(result.error?.message || 'Midjourney task failed'));
+          }
+        })
+        .catch(() => {
+          // Webhook or timeout fallback handles completion.
+        });
+    });
+  }
+
   try {
     const result = await fetchMidjourneyResult(mjJobId);
     if (result.status === 'completed') return parseGridOutput(result, mjJobId);
@@ -869,29 +925,7 @@ async function waitForGridJob(mjJobId) {
     if (/Midjourney task failed/i.test(err.message || '')) throw err;
   }
 
-  const callbackBase = getPublicBaseUrl();
-  if (!callbackBase) return pollGridJob(mjJobId);
-
-  return new Promise((resolve, reject) => {
-    const timeoutMs = MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS;
-    const timeout = setTimeout(() => {
-      mjPendingCallbacks.delete(mjJobId);
-      pollGridJob(mjJobId).then(resolve).catch(reject);
-    }, timeoutMs);
-
-    mjPendingCallbacks.set(mjJobId, {
-      resolve: (grid) => {
-        clearTimeout(timeout);
-        mjPendingCallbacks.delete(mjJobId);
-        resolve(grid);
-      },
-      reject: (err) => {
-        clearTimeout(timeout);
-        mjPendingCallbacks.delete(mjJobId);
-        reject(err);
-      },
-    });
-  });
+  return pollGridJob(mjJobId);
 }
 
 async function pollUpscaleJob(jobId) {
@@ -1100,6 +1134,12 @@ async function generateAllImages(job, { onGenComplete } = {}) {
     throw new Error('All Midjourney image generations failed');
   }
 
+  if (completedGens < job.concepts.length) {
+    const msg = `Only ${completedGens}/${job.concepts.length} image generations succeeded`;
+    job.warnings.push(msg);
+    console.warn(`[job ${job.id}] ${msg}`);
+  }
+
   if (!onGenComplete) {
     allImages.forEach((img, idx) => { img.rawIndex = idx; });
     job.rawImages = allImages;
@@ -1154,8 +1194,8 @@ async function qcLiteralAnchor(img, lockedAnchor, jobId) {
     }],
   });
 
-  const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim().toUpperCase();
-  return raw === 'YES';
+  const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  return normalizeLiteralVerdict(raw);
 }
 
 async function qcOneImage(img, jobId, clogPrompt, lockedAnchor = null) {
@@ -1203,7 +1243,7 @@ async function qcOneImage(img, jobId, clogPrompt, lockedAnchor = null) {
         .join('')
         .trim();
 
-      verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
+      verdict = normalizeClogVerdict(raw);
 
       if (verdict === 'PASS' && lockedAnchor) {
         const literalOk = await qcLiteralAnchor(img, lockedAnchor, jobId);
@@ -1272,7 +1312,11 @@ async function runPipeline(job) {
             runQcForImages(job, images, clogPrompt).catch((err) => {
               console.error(`[job ${job.id}] QC error for gen batch:`, err.message);
               for (const img of images) {
-                job.approvedImages.push({ ...img, verdict: 'skipped' });
+                job.rejectedImages.push({
+                  ...img,
+                  verdict: 'ERROR',
+                  reason: err.message || 'QC batch failed',
+                });
               }
               emitJobUpdate(job);
             })

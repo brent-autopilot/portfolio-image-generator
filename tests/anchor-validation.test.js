@@ -72,6 +72,27 @@ describe('validateConcepts', () => {
     assert.equal(result.valid, false);
     assert.ok(result.errors.some((e) => e.includes('missing anchor keywords')));
   });
+
+  it('fails when concept count is wrong', () => {
+    const concepts = [
+      { anchor: 'umbrella', concept: 'one', prompt: 'umbrella in rain' },
+      { anchor: 'umbrella', concept: 'two', prompt: 'umbrella on wet street, rain falling' },
+    ];
+    const result = validateConcepts(locked, concepts, { expectedCount: 3 });
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('Expected exactly 3 concepts')));
+  });
+
+  it('fails when anchor field is missing', () => {
+    const concepts = [
+      { concept: 'shot', prompt: 'umbrella in rain, editorial photo' },
+      { concept: 'street', prompt: 'umbrella on wet sidewalk, rain falling' },
+      { concept: 'sky', prompt: 'umbrella from below, stormy rain sky' },
+    ];
+    const result = validateConcepts(locked, concepts, { requireAnchorField: true });
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('missing anchor field')));
+  });
 });
 
 describe('fund golden cases', () => {
