@@ -61,6 +61,11 @@ SPECIAL CATEGORY — HEDGE FUND LOGO MARKS:
 These entries specifically direct Claude to create a logo/emblem/crest for
 the fund. They describe the RENDERING TREATMENT of the mark (material,
 finish, lighting), NOT the symbol itself — the fund thesis drives that.
+
+STYLE MUST NOT DEFINE THE SUBJECT:
+- Never describe particles, networks, or shapes "forming" or "dissolving" as the image content
+- Apply the medium to whatever anchor subject the fund provides (e.g. cyanotype ON an umbrella, not cyanotype AS the subject)
+- If an entry would produce abstract imagery without the fund noun, rewrite it as medium/texture only
   GOOD: "3D hedge fund logo mark, chrome beveled emblem with environment reflections on matte black"
   BAD:  "hedge fund logo with falcon and compass on shield" (prescribes the symbol)
 
@@ -106,7 +111,7 @@ street photography, candid moment, high contrast black and white
 long exposure light painting, luminous trails in pitch darkness
 Dutch Golden Age still life, dark field with jewel-tone subjects
 chrome reflection, mirror-polished metal warping its surroundings
-smoke and particle dispersion, subject dissolving into atmosphere
+smoke and atmospheric haze, soft diffusion around edges, cinematic depth
 selenium-toned silver print, cool metallic blacks with archival permanence
 cross-processed slide film, shifted greens and oversaturated blues
 marble sculpture, Carrara white against charcoal studio backdrop
@@ -161,7 +166,7 @@ construction site documentary, golden hour through steel framework
 dark editorial still life, Caravaggio lighting on modern objects
 luxe material close-up, brushed metal or matte ceramic with raking light
 electron microscope macro, extreme magnification of crystalline or cellular structure
-Refik Anadol data sculpture, flowing digital particles forming architectural mass
+Refik Anadol data sculpture aesthetic, flowing digital texture on architectural surfaces
 chiaroscuro spotlight, single harsh light source in total darkness
 Kodachrome 64 slide film, saturated reds and deep blacks with warm cast
 matte painting concept art, epic scale environment with atmospheric depth
@@ -179,7 +184,7 @@ Wes Anderson symmetry, pastel palette with obsessive centered framing
 Venetian plaster and warm stone, ochre and sienna palette with raking afternoon light
 laser-cut acrylic layers, translucent colored sheets with edge-lit glow
 high-key beauty photography, blown-out whites with luminous skin
-satellite night imagery, golden luminous networks on black earth from orbital altitude
+satellite night imagery color grade, golden city lights on black earth from high altitude
 Röntgen X-ray aesthetic, translucent skeletal structure revealed on dark field
 vitrine museum display, object on pedestal behind anti-reflective glass
 foil stamp on matte black, metallic gold or silver catching directional light
@@ -344,7 +349,7 @@ Anthony Caro painted steel assemblage, angular industrial forms in bold matte co
 kinetic sculpture in motion, Calder-inspired balanced elements caught mid-rotation with blur
 glassmorphism style, frosted translucent panel with subtle border and depth blur on gradient
 neomorphism soft render, extruded and inset shapes with matching background color and soft shadow
-gradient mesh orb, smooth organic color transitions forming a floating sphere on dark field
+gradient mesh lighting, smooth organic color transitions on dark field backdrop
 aurora gradient, flowing bands of teal to violet to magenta on deep charcoal ground
 liquid glass material, transparent refractive blob with caustic light patterns on surface
 dark mode data aesthetic, glowing elements on matte black with subtle grid lines
@@ -356,13 +361,13 @@ neon wireframe landscape, retrowave grid terrain with glowing horizon line and s
 chromatic aberration portrait, RGB fringing on edges with shallow depth against dark backdrop
 layered translucent panels, angled frosted cards with soft parallax depth cues
 matte glass partition, ground-glass surface with silhouetted forms behind and edge refraction
-particle field dispersion, thousands of luminous dots forming or dissolving a recognizable shape
+stippled halftone texture, fine dot grain over high-contrast subject on dark ground
 soft radial gradient, concentric color rings transitioning from warm core to cool edge on black
 crystalline data visualization, abstract 3D forms rendered in glass and light
 holographic foil texture, shifting spectral rainbow on smooth metallic surface at angle
 ambient occlusion study, white forms with soft contact shadows revealing pure geometric volume
 subsurface scattering material, light penetrating translucent surface revealing internal glow
-neural network visualization, interconnected nodes with glowing signal paths on dark ground
+tech diagram aesthetic, node-and-line overlay texture on dark ground without becoming the subject
 topographic data render, elevation data as luminous contour lines on dark 3D terrain
 frosted glass etch, ground glass surface with backlit edge definition and subtle depth
 brushed aluminum panel, fine linear grain with anodized color tint and controlled reflection
@@ -406,7 +411,7 @@ acid-etched brass fund logo, chemically darkened recesses with polished raised s
 lacquered ebony fund mark, piano-black gloss surface with gold pinstripe detail and deep reflection
 frosted titanium fund emblem, vapor-blasted matte surface with precise machined geometry
 marble inlay fund logo, pietra dura technique with semi-precious stone on nero marquina
-woven metal fund mark, interlaced fine wire strands in white gold forming dimensional surface
+woven metal surface texture, interlaced fine wire strands in white gold with dimensional relief
 smoked glass fund emblem, dark transparent volume with edge-lit glow and trapped geometry
 patinated bronze fund seal, aged medallion with verdigris and gold remnants on dark velvet
 laser-sintered fund mark, 3D-printed metal powder with visible additive layers and raw finish

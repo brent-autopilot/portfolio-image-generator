@@ -166,6 +166,10 @@ RULES:
 - THE JSON SETS ATMOSPHERE, NOT CONTENT. Warm/cool, dramatic/soft, compressed/expansive, textured/smooth. That's it.
 - STYLE MATCHES THE THESIS'S EMOTIONAL REGISTER. Not locked to one approach.
 - RECOGNIZABILITY TEST: Before finalizing any prompt, ask: if this image had no label, would a viewer identify the core subject from the fund name? If the style treatment makes the subject ambiguous or unrecognizable, dial back the style until the subject is unmistakable. The style serves the subject, never competes with it.
+- INTERPRETATION = COMPOSITION ONLY. External interpretation directives change shot type, environment, scale, or action of the anchor subject. They never replace the anchor with an abstract symbol (explosion, particle web, network diagram, breakthrough moment).
+- STYLE = MEDIUM ONLY. External style directives control rendering technique, never what appears in the scene.
+- ONE ANCHOR, THREE SHOTS. All concepts in a run share the same fund noun. Variation is photographic, not conceptual.
+- FUND-IMAGE TEST. Would a portfolio manager immediately recognize this as their fund's literal subject? If not, the prompt failed.
 - No text, logos, UI, overlays.
 - No named emotions except the final mood line.
 - Zero nouns from the JSON.
@@ -192,4 +196,4 @@ Generate the fused image-generation prompt now.
 - Steer the scene: "The obvious image for this fund is [X], start there."
 - Steer the style: "This should feel [photographic / painterly / cinematic dark]."
 - Steer the atmosphere: "Lean the JSON influence toward [warmer / cooler / more dramatic / softer]."
-- For series: "3 variations on the same fund, same obvious metaphor, different moments or angles."
+- For series: "3 variations on the same fund — same obvious anchor subject, different compositions or angles."

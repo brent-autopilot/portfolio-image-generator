@@ -1,31 +1,38 @@
 # Interpretation Bank
 
-<!-- One interpretation angle per line. One is randomly assigned per concept to diversify conceptual direction. 25 entries. -->
+<!--
+AUTHORING RULES — literal composition only:
+- Every entry changes composition, scale, environment, or action of the ANCHOR SUBJECT
+- The anchor noun from the fund name must remain visible and dominant in frame
+- Never introduce abstract metaphors, networks, breakthroughs, or new subjects
+- Never reference "thesis", "fund", "system", or conceptual framing
+- One entry per line; weighted random pick assigns one per concept
+-->
 
 ---
 
-find the tension or conflict implied by the thesis
-show scale — make something impossibly large or impossibly small
-show the thesis as a force of nature — wind, gravity, pressure, heat
-zoom into a single material detail that symbolizes the whole
-interpret the fund name as a physical place or environment
-treat it as a still from a film — what scene is this?
-interpret through industry — factories, furnaces, assembly lines
-show the fund's subject as if it were alive — breathing, pulsing, or growing
-show the thesis at planetary or cosmic scale
-depict the thesis as a balance or imbalance between two forces
-interpret through time — show decay, growth, or transformation
-show the fund's subject in its simplest, most elemental form
-find the most luxurious or precious material the thesis implies
-show the fund's subject in a state of tension or anticipation
-show the thesis through water — currents, tides, pressure, depth
-show the thesis in its final, perfected state
-depict the fund as a tool or instrument — what does it build?
-show what the fund protects against, not what it pursues
-show the fund's thesis as a structure being built or rising
-show the fund's thesis as something rare, scarce, or hard to access
-show the fund's thesis as a network, web, or interconnected system
-show the fund's thesis as something being forged, tempered, or refined
-show the fund's thesis in motion — velocity, momentum, or acceleration without losing clarity
-show the fund's thesis at the moment of breakthrough or emergence
-show the fund's thesis outperforming, leading, or standing apart from the rest
+anchor subject filling the frame, close-up, large and dominant
+anchor subject centered with generous negative space around it
+anchor subject seen from a low angle, heroic and imposing
+anchor subject seen from above, top-down or bird's-eye view
+anchor subject in sharp focus with soft blurred background
+anchor subject at the edge of frame with dramatic negative space
+anchor subject in its natural everyday environment or setting
+anchor subject on a clean studio backdrop, isolated and bold
+anchor subject outdoors with sky or weather visible
+anchor subject indoors with architectural context
+anchor subject with rain, wind, storm, or atmospheric weather
+anchor subject with warm golden-hour natural light
+anchor subject with cool overcast or blue-hour light
+anchor subject at night with artificial light sources
+anchor subject in motion or mid-action
+anchor subject at rest, still, and composed
+anchor subject shown with hands or silhouette interacting with it
+anchor subject reflected in water, glass, or polished surface
+anchor subject small against a vast landscape or sky
+anchor subject macro detail — texture, material, or surface close-up
+anchor subject grouped with one or two supporting objects max
+anchor subject on wet ground, sidewalk, or rain-slick surface
+anchor subject backlit with strong rim light and silhouette edges
+anchor subject front-lit with even clarity and readable form
+anchor subject casting a long dramatic shadow across the ground

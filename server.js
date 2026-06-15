@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import multer from 'multer';
 import { ZipArchive } from 'archiver';
+import { validateConcepts, buildKeywordList } from './lib/anchor-validation.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -164,6 +165,7 @@ function serializeJobPayload(job) {
     actualSrefs: job.actualSrefs,
     profileTags: job.profileTags,
     genRatings: job.genRatings || {},
+    lockedAnchor: job.lockedAnchor,
     concepts: job.concepts,
     mjTaskIds: job.mjTaskIds,
     rawImages: job.rawImages,
@@ -461,6 +463,7 @@ function createJob(fundName, fundThesis, styleJson, bypassMode = 'normal') {
     rawImages: [],
     approvedImages: [],
     rejectedImages: [],
+    lockedAnchor: null,
     error: null,
     createdAt: Date.now(),
   };
@@ -485,8 +488,163 @@ const pruneTimer = setInterval(pruneExpiredJobs, JOB_PRUNE_INTERVAL_MS);
 pruneTimer.unref();
 
 // ---------------------------------------------------------------------------
-// Stage 1 — Claude Sonnet: generate 3 distinct 15-word image prompts
+// Stage 1 — Claude Sonnet: generate 3 distinct image prompts (anchor-locked)
 // ---------------------------------------------------------------------------
+const THEME_MODEL = 'claude-sonnet-4-20250514';
+
+function parseJsonFromClaude(raw) {
+  const jsonMatch = raw.match(/\[[\s\S]*\]/) || raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+}
+
+async function extractLockedAnchor(job, thesis) {
+  const resp = await getAnthropic().messages.create({
+    model: THEME_MODEL,
+    max_tokens: 256,
+    system: `You identify the single most obvious LITERAL visual subject from a fund name. Return only JSON.`,
+    messages: [{
+      role: 'user',
+      content: `Fund name: "${job.fundName}"
+Thesis: "${thesis}"
+
+What is the obvious literal visual subject a normal person pictures? Not abstract concepts, not financial metaphors.
+
+Examples:
+- "Rain Check Capital" → umbrella, rain
+- "Umbrella Trading" → umbrella
+- "Silver Fund" → silver metal
+
+Return ONLY JSON:
+{
+  "noun": "2-4 word anchor phrase",
+  "keywords": ["word1", "word2"]
+}
+
+keywords must be concrete nouns that must appear in image prompts (include plural/singular variants if helpful).`,
+    }],
+  });
+
+  const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const parsed = parseJsonFromClaude(raw);
+  if (!parsed?.noun || typeof parsed.noun !== 'string') {
+    throw new Error(`Failed to extract locked anchor. Raw: ${raw.slice(0, 200)}`);
+  }
+
+  const keywords = Array.isArray(parsed.keywords)
+    ? parsed.keywords.filter((k) => typeof k === 'string' && k.trim())
+    : [];
+
+  const locked = { noun: parsed.noun.trim(), keywords };
+  job.lockedAnchor = locked;
+  console.log(`[job ${job.id}] Locked anchor: "${locked.noun}" keywords=[${buildKeywordList(locked.noun, locked.keywords).join(', ')}]`);
+  return locked;
+}
+
+function buildDirectivesParagraph(mode, styles, interpretations) {
+  const useStyles = styles.length > 0;
+  const useInterps = interpretations.length > 0;
+  let directivesParagraph = '';
+  let extraReturnFields = '';
+
+  if (useStyles && useInterps) {
+    const directives = styles
+      .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} composition: "${interpretations[i]}"`)
+      .join('\n');
+
+    directivesParagraph = `\n\nEach concept has a mandatory visual STYLE and mandatory COMPOSITION directive.
+
+Style = medium, technique, lighting, texture — HOW it renders. Never what the subject is.
+Composition = camera angle, environment, scale, framing of the LOCKED ANCHOR — never a new subject.
+
+${directives}
+
+CRITICAL RULES:
+- Style controls rendering only. If a style mentions objects, apply as texture/material to the anchor subject.
+- Composition changes framing of the anchor subject only. If composition could be satisfied without showing the anchor noun, reject it and stay literal.
+- The locked anchor is the ONLY subject. No abstract metaphors, explosions, particle webs, or networks.`;
+
+    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned composition directive (echo it back exactly)';
+  } else if (useStyles) {
+    const directives = styles.map((s, i) => `  Concept ${i + 1} style: "${s}"`).join('\n');
+    directivesParagraph = `\n\nEach concept has a mandatory visual style (rendering treatment only):\n\n${directives}\n\nStyle controls HOW the anchor looks, never WHAT the subject is.`;
+    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)';
+  } else if (useInterps) {
+    const directives = interpretations.map((interp, i) => `  Concept ${i + 1} composition: "${interp}"`).join('\n');
+    directivesParagraph = `\n\nEach concept has a mandatory composition directive (framing of the anchor only):\n\n${directives}`;
+    extraReturnFields = '\n- "interpretation": the assigned composition directive (echo it back exactly)';
+  }
+
+  return { directivesParagraph, extraReturnFields };
+}
+
+function buildThemeUserMessage({
+  job, thesis, lockedAnchor, directivesParagraph, extraReturnFields, styleContext, isFullBypass, retryNote,
+}) {
+  const keywordList = buildKeywordList(lockedAnchor.noun, lockedAnchor.keywords).join(', ');
+
+  if (isFullBypass) {
+    return `Fund name: "${job.fundName}"
+Thesis: "${thesis}"
+
+LOCKED ANCHOR: "${lockedAnchor.noun}" — keywords that MUST appear in every prompt: ${keywordList}
+${retryNote || ''}
+
+Generate exactly ${NUM_CONCEPTS} simple literal Midjourney prompts. SAME anchor subject, different compositions/angles. No abstract metaphors.
+
+Return ONLY a JSON array of exactly ${NUM_CONCEPTS} objects:
+- "anchor": must be "${lockedAnchor.noun}" exactly
+- "concept": 2-3 word shot label referencing the literal subject (e.g. "umbrella close-up")
+- "prompt": 15-30 words, comma-separated fragments, anchor dominant`;
+  }
+
+  return `THE FUND:
+  FUND NAME: "${job.fundName}"
+  FUND THESIS: "${thesis}"
+
+LOCKED ANCHOR (non-negotiable — same subject in ALL ${NUM_CONCEPTS} prompts):
+  noun: "${lockedAnchor.noun}"
+  required keywords in every prompt: ${keywordList}
+${retryNote || ''}
+
+Generate exactly ${NUM_CONCEPTS} concepts depicting the SAME locked anchor subject. Each uses a different composition, angle, environment, or moment. The anchor noun must be unmistakable and dominant. No abstract metaphors. No new subjects.
+
+HIERARCHY:
+1. LOCKED ANCHOR — what is in the image (non-negotiable)
+2. COMPOSITION (interpretation) — how it is framed
+3. STYLE — how it is rendered${directivesParagraph}
+
+PROMPT LENGTH: 20-45 words. Evocative comma-separated fragments. Every prompt must contain at least one required keyword.${styleContext}
+
+Return ONLY a JSON array of exactly ${NUM_CONCEPTS} objects:
+- "anchor": must be "${lockedAnchor.noun}" exactly
+- "concept": 2-3 word shot label (e.g. "umbrella close-up", "rain street") — literal subject only, never abstract
+- "prompt": Midjourney prompt — anchor dominant${extraReturnFields}`;
+}
+
+async function callClaudeForConcepts(systemPrompt, userMessage) {
+  const resp = await getAnthropic().messages.create({
+    model: THEME_MODEL,
+    max_tokens: 1024,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
+  });
+
+  const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const concepts = parseJsonFromClaude(raw);
+  if (!Array.isArray(concepts)) {
+    throw new Error(`Failed to parse Claude concepts JSON: ${raw.slice(0, 200)}`);
+  }
+
+  return concepts
+    .filter((c) => c && typeof c.concept === 'string' && typeof c.prompt === 'string')
+    .slice(0, NUM_CONCEPTS);
+}
+
 async function generateThemes(job) {
   setJobStage(job, 'generating_theme');
 
@@ -503,165 +661,63 @@ async function generateThemes(job) {
   const useInterps = mode === 'normal' || mode === 'skip-style';
   const isFullBypass = mode === 'full-bypass';
 
-  let directivesParagraph = '';
-  let extraReturnFields = '';
+  const styles = useStyles
+    ? (job.manualStyle ? Array(NUM_CONCEPTS).fill(job.manualStyle) : pickRandomStyles(NUM_CONCEPTS))
+    : [];
+  const interpretations = useInterps
+    ? (job.manualInterpretation ? Array(NUM_CONCEPTS).fill(job.manualInterpretation) : pickRandomInterpretations(NUM_CONCEPTS))
+    : [];
 
-  if (useStyles || useInterps) {
-    const styles = useStyles
-      ? (job.manualStyle ? Array(NUM_CONCEPTS).fill(job.manualStyle) : pickRandomStyles(NUM_CONCEPTS))
-      : [];
-    const interpretations = useInterps
-      ? (job.manualInterpretation ? Array(NUM_CONCEPTS).fill(job.manualInterpretation) : pickRandomInterpretations(NUM_CONCEPTS))
-      : [];
-    job.assignedStyles = styles;
-    job.assignedInterpretations = interpretations;
-    if (styles.length) console.log(`[job ${job.id}] Assigned styles:`, styles);
-    if (interpretations.length) console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
+  job.assignedStyles = styles;
+  job.assignedInterpretations = interpretations;
+  if (styles.length) console.log(`[job ${job.id}] Assigned styles:`, styles);
+  if (interpretations.length) console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
+  if (isFullBypass) console.log(`[job ${job.id}] Full bypass — style + interpretation banks disabled`);
 
-    if (useStyles && useInterps) {
-      const directives = styles
-        .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} interpretation: "${interpretations[i]}"`)
-        .join('\n');
+  const lockedAnchor = await extractLockedAnchor(job, thesis);
+  emitJobUpdate(job);
 
-      directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style AND a mandatory interpretation angle.
+  const { directivesParagraph, extraReturnFields } = buildDirectivesParagraph(mode, styles, interpretations);
+  let systemPrompt = isFullBypass
+    ? `You are a visual prompt distiller for Midjourney. Given a locked literal anchor subject, write concrete prompts. Never abstract.`
+    : THEME_SYSTEM_PROMPT;
 
-Style defines the artistic treatment — the medium, technique, or rendering approach.
-Interpretation defines the creative angle — how to THINK about the fund thesis when choosing what to depict.
+  let retryNote = '';
+  let valid = [];
+  let lastValidationErrors = [];
 
-You MUST use BOTH for each concept:
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const userMessage = buildThemeUserMessage({
+      job, thesis, lockedAnchor, directivesParagraph, extraReturnFields, styleContext, isFullBypass, retryNote,
+    });
 
-${directives}
-
-CRITICAL RULES:
-- The style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
-- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back. Example: for a mortgage fund, "interpret through architecture" should show mortgage-related architecture (foreclosed house, bank vault), not unrelated buildings.
-- The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
-
-      extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
-    } else if (useStyles) {
-      const directives = styles
-        .map((s, i) => `  Concept ${i + 1} style: "${s}"`)
-        .join('\n');
-
-      directivesParagraph = `\n\nEach concept has been assigned a mandatory visual style.
-
-Style defines the artistic treatment — the medium, technique, or rendering approach.
-
-You MUST use the assigned style for each concept:
-
-${directives}
-
-CRITICAL RULES:
-- The style controls HOW the image looks (medium, texture, lighting, color). Bake it into the prompt naturally. If the style mentions specific objects, treat those as material/textural references, not literal subjects.
-- The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
-
-      extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)';
-    } else if (useInterps) {
-      const directives = interpretations
-        .map((interp, i) => `  Concept ${i + 1} interpretation: "${interp}"`)
-        .join('\n');
-
-      directivesParagraph = `\n\nEach concept has been assigned a mandatory interpretation angle.
-
-Interpretation defines the creative angle — how to THINK about the fund thesis when choosing what to depict.
-
-You MUST use the assigned interpretation for each concept:
-
-${directives}
-
-CRITICAL RULES:
-- The interpretation shapes your creative angle — but the resulting image must still be clearly about the fund thesis. If the interpretation pulls you away from the fund's subject, you've gone too far. Pull it back.
-- The fund thesis is ALWAYS the source of the subject matter. No exceptions.`;
-
-      extraReturnFields = '\n- "interpretation": the assigned interpretation angle (echo it back exactly)';
+    const concepts = await callClaudeForConcepts(systemPrompt, userMessage);
+    if (concepts.length === 0) {
+      throw new Error('Claude returned no valid concepts');
     }
-  } else {
-    console.log(`[job ${job.id}] Full bypass — style + interpretation banks disabled`);
+
+    const validation = validateConcepts(lockedAnchor, concepts);
+    if (validation.valid) {
+      valid = concepts;
+      if (attempt > 0) {
+        console.warn(`[job ${job.id}] Anchor validation passed on retry ${attempt + 1}`);
+      }
+      break;
+    }
+
+    lastValidationErrors = validation.errors;
+    console.warn(`[job ${job.id}] Anchor validation failed (attempt ${attempt + 1}):`, validation.errors.join('; '));
+    retryNote = `\n\nVALIDATION FAILED — fix these errors:\n${validation.errors.map((e) => `- ${e}`).join('\n')}\nEvery prompt MUST contain: ${validation.keywords.join(', ')}. Every anchor MUST be "${lockedAnchor.noun}".`;
   }
-
-  let systemPrompt = THEME_SYSTEM_PROMPT;
-  let userMessage;
-
-  if (isFullBypass) {
-    systemPrompt = `You are a visual prompt distiller for Midjourney image generation. Given a fund name and optional thesis, identify the most obvious literal visual subject. Strip financial jargon and abstract concepts. Return clean, concrete image prompts focused on what the fund name evokes visually. Keep prompts simple, literal, and vivid — comma-separated fragments, not sentences. 15-30 words per prompt.`;
-
-    userMessage = `Fund name: "${job.fundName}"
-Thesis: "${thesis}"
-
-What does this fund name literally look like? Identify the core visual subject and generate exactly ${NUM_CONCEPTS} different simple, literal Midjourney prompts. Each should depict the fund's subject from a different angle but stay concrete and obvious.
-
-Return ONLY a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
-- "anchor": the obvious visual subject (1-3 words)
-- "concept": a 2-3 word label
-- "prompt": the Midjourney image prompt (15-30 words, simple and literal)
-
-Return ONLY the JSON array, no other text.`;
-  } else {
-    userMessage = `THE FUND (this is the most important input — everything else serves this):
-
-  FUND NAME: "${job.fundName}"
-  FUND THESIS: "${thesis}"
-
-Read the fund name and thesis carefully. What does this fund actually DO? What is it about? What would a normal person picture when they hear this name? That mental image is the foundation of every prompt you write. Nothing — no style, no interpretation, no creative angle — overrides this.
-
-ANCHOR RULE: Identify the OBVIOUS visual subject from the fund name/thesis FIRST.
-- "Silver" → silver metal, silver material, silver color
-- "Voyage Fund" → a ship, a journey, open water
-- "Hedge the AI Bubble" → a bubble, something being hedged
-- "Photonics" → light, optics, photons, lenses, fiber
-This anchor subject MUST be the dominant, recognizable element in every single prompt. If someone saw only the image with no label, they should intuitively connect it to the fund.${directivesParagraph}
-
-Generate exactly ${NUM_CONCEPTS} completely different image concepts. Each must use a different visual metaphor, subject, and scene — no overlap. But ALL must clearly be about this fund.
-
-HIERARCHY OF IMPORTANCE:
-1. THE FUND (anchor subject from fund name/thesis) — non-negotiable, always dominant
-2. THE INTERPRETATION (creative angle) — shapes how you approach the anchor, never replaces it
-3. THE STYLE (rendering treatment) — controls how it looks, never changes what it depicts
-
-PROMPT LENGTH: 20-45 words. Vary naturally — some concepts need more detail, some are stronger spare. Include: style/medium, anchor subject, action or state, atmospheric detail. Add a second visual detail if it strengthens the image. NO narrative sentences — use evocative fragments separated by commas. Every word must earn its place.${styleContext}
-
-Return your response as a JSON array of exactly ${NUM_CONCEPTS} objects, each with:
-- "anchor": the obvious visual subject from the fund name (1-3 words, e.g. "silver metal" or "ship at sea") — state this BEFORE writing the prompt
-- "concept": a 2-3 word label for your creative angle on the anchor
-- "prompt": the Midjourney image prompt (20-45 words, evocative fragments not sentences) — the anchor subject MUST be the dominant element${extraReturnFields}
-
-Return ONLY the JSON array, no other text.`;
-  }
-
-  const resp = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }],
-  });
-
-  const raw = resp.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
-
-  let concepts;
-  try {
-    const jsonMatch = raw.match(/\[[\s\S]*\]/);
-    concepts = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-  } catch {
-    throw new Error(`Failed to parse Claude response as JSON: ${raw.slice(0, 200)}`);
-  }
-
-  if (!Array.isArray(concepts)) {
-    throw new Error(`Claude returned non-array: ${raw.slice(0, 200)}`);
-  }
-
-  const valid = concepts
-    .filter((c) => c && typeof c.concept === 'string' && typeof c.prompt === 'string')
-    .slice(0, NUM_CONCEPTS);
 
   if (valid.length === 0) {
-    throw new Error(`Claude returned no valid concepts. Raw: ${raw.slice(0, 300)}`);
+    const msg = `Anchor validation failed after retry: ${lastValidationErrors.join('; ')}`;
+    console.error(`[job ${job.id}] ${msg}`);
+    throw new Error(msg);
   }
 
   job.concepts = valid;
-  console.log(`[job ${job.id}] [${mode}] Generated ${job.concepts.length} concepts:`);
+  console.log(`[job ${job.id}] [${mode}] Generated ${job.concepts.length} anchor-locked concepts:`);
   job.concepts.forEach((c, i) => console.log(`  ${i + 1}. [${c.concept}] ${c.prompt}`));
 
   return job.concepts;
@@ -1059,7 +1115,49 @@ const QC_MODEL = 'claude-sonnet-4-20250514';
 
 const QC_CONCURRENCY = 6;
 
-async function qcOneImage(img, jobId, clogPrompt) {
+async function qcLiteralAnchor(img, lockedAnchor, jobId) {
+  if (!lockedAnchor?.noun) return true;
+
+  let buf;
+  let mediaType = 'image/jpeg';
+
+  if (img.quadrantFile) {
+    const qPath = join(QUADRANT_DIR, jobId, img.quadrantFile);
+    buf = readFileSync(qPath);
+  } else {
+    const imgRes = await fetch(img.url);
+    if (!imgRes.ok) throw new Error(`Failed to download image for literal QC: HTTP ${imgRes.status}`);
+    buf = Buffer.from(await imgRes.arrayBuffer());
+    const contentType = imgRes.headers.get('content-type') || 'image/png';
+    mediaType = contentType.split(';')[0].trim();
+  }
+
+  const keywords = buildKeywordList(lockedAnchor.noun, lockedAnchor.keywords || []);
+  const base64 = buf.toString('base64');
+
+  const resp = await getAnthropic().messages.create({
+    model: QC_MODEL,
+    max_tokens: 5,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: mediaType, data: base64 },
+        },
+        {
+          type: 'text',
+          text: `Is the dominant, unmistakable subject in this image clearly "${lockedAnchor.noun}" (acceptable related forms: ${keywords.join(', ')})? Ignore style treatment. Answer only YES or NO.`,
+        },
+      ],
+    }],
+  });
+
+  const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim().toUpperCase();
+  return raw === 'YES';
+}
+
+async function qcOneImage(img, jobId, clogPrompt, lockedAnchor = null) {
   let verdict = 'ERROR';
   let reason = '';
 
@@ -1105,6 +1203,15 @@ async function qcOneImage(img, jobId, clogPrompt) {
         .trim();
 
       verdict = raw === 'PASS' ? 'PASS' : 'FAIL';
+
+      if (verdict === 'PASS' && lockedAnchor) {
+        const literalOk = await qcLiteralAnchor(img, lockedAnchor, jobId);
+        if (!literalOk) {
+          verdict = 'FAIL';
+          reason = `Literal anchor check failed: expected "${lockedAnchor.noun}"`;
+          console.warn(`[job ${jobId}] ${reason} for concept "${img.concept}"`);
+        }
+      }
       break;
     } catch (err) {
       reason = err.message || 'QC check failed';
@@ -1113,7 +1220,7 @@ async function qcOneImage(img, jobId, clogPrompt) {
     }
   }
 
-  return { ...img, verdict, ...(verdict === 'ERROR' ? { reason } : {}) };
+  return { ...img, verdict, ...(verdict === 'ERROR' || reason ? { reason } : {}) };
 }
 
 async function runQcForImages(job, images, clogPrompt) {
@@ -1121,7 +1228,7 @@ async function runQcForImages(job, images, clogPrompt) {
   for (let i = 0; i < images.length; i += QC_CONCURRENCY) {
     const batch = images.slice(i, i + QC_CONCURRENCY);
     const batchResults = await Promise.all(
-      batch.map((img) => qcOneImage(img, job.id, clogPrompt))
+      batch.map((img) => qcOneImage(img, job.id, clogPrompt, job.lockedAnchor))
     );
     results.push(...batchResults);
   }
