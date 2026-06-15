@@ -490,7 +490,8 @@ pruneTimer.unref();
 // ---------------------------------------------------------------------------
 // Stage 1 — Claude Sonnet: generate 3 distinct image prompts (anchor-locked)
 // ---------------------------------------------------------------------------
-const THEME_MODEL = 'claude-sonnet-4-20250514';
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+const THEME_MODEL = CLAUDE_MODEL;
 
 function parseJsonFromClaude(raw) {
   const jsonMatch = raw.match(/\[[\s\S]*\]/) || raw.match(/\{[\s\S]*\}/);
@@ -1111,7 +1112,7 @@ async function generateAllImages(job, { onGenComplete } = {}) {
 // ---------------------------------------------------------------------------
 // Stage 3 — Clog QC check (binary PASS/FAIL gate)
 // ---------------------------------------------------------------------------
-const QC_MODEL = 'claude-sonnet-4-20250514';
+const QC_MODEL = CLAUDE_MODEL;
 
 const QC_CONCURRENCY = 6;
 
