@@ -26,6 +26,13 @@ describe('promptContainsAnchor', () => {
     );
   });
 
+  it('matches plural keyword variants', () => {
+    assert.equal(
+      promptContainsAnchor('open umbrellas in heavy rain', ['umbrella', 'rain']),
+      true
+    );
+  });
+
   it('rejects prompts without anchor keywords', () => {
     assert.equal(
       promptContainsAnchor('particle explosion, abstract network', ['umbrella']),

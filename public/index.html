@@ -2368,7 +2368,7 @@
 
       if (status.stage === 'error') {
         errorDisplay.classList.remove('hidden');
-        errorText.textContent = status.error || 'An unknown error occurred';
+        errorText.textContent = status.error || 'Generation failed';
         return 'error';
       }
 
@@ -2428,11 +2428,11 @@
 
           const outcome = handleJobStatus(status);
           if (outcome === 'error') {
-            finished = true;
-            es.close();
-            resolve();
-            return;
-          }
+          finished = true;
+          es.close();
+          resolve();
+          return;
+        }
           if (outcome === 'complete') {
             finished = true;
             es.close();

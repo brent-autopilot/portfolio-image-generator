@@ -1294,8 +1294,8 @@ async function runPipeline(job) {
       console.error(`[job ${job.id}] Archive error:`, err.message)
     );
   } catch (err) {
+    job.error = err?.message || String(err);
     setJobStage(job, 'error');
-    job.error = err.message;
     console.error(`[job ${job.id}] Pipeline error:`, err);
   }
 }
