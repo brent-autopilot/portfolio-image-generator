@@ -1836,7 +1836,8 @@ async function archiveImage(img, fundName, jobId) {
       const qPath = join(QUADRANT_DIR, jobId, img.quadrantFile);
       copyFileSync(qPath, filepath);
     } else {
-      const srcUrl = img.upscaled ? img.url : (img.gridUrl || img.url);
+      const isLocalUrl = img.url?.startsWith('/');
+      const srcUrl = img.upscaled ? img.url : (isLocalUrl ? (img.gridUrl || img.url) : img.url);
       const res = await fetch(srcUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (!res.body) throw new Error('Empty response body');
