@@ -58,17 +58,26 @@
     }
     .login-btn { width: 100%; padding: 14px; border-radius: 12px; font-size: 14px; }
     .login-btn:hover, .grade-btn:hover { background: rgba(255,255,255,0.16); }
-    .login-btn:focus-visible, .grade-btn:focus-visible, .ghost-btn:focus-visible, .back-link:focus-visible {
-      outline: none; box-shadow: var(--focus-ring);
-    }
     button:disabled { opacity: 0.45; cursor: default; }
 
     .wrap { max-width: 920px; margin: 0 auto; padding: 36px 20px 80px; }
-    .header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
-    .header h1 { font-size: 28px; font-weight: 900; letter-spacing: -1px; }
-    .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-dim); }
-    .back-link { color: var(--text-dim); font-size: 13px; text-decoration: none; }
-    .back-link:hover { color: var(--text); }
+    .header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .header h1 { font-size: 40px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
+    .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
+    .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .mode-nav {
+      display: flex; padding: 3px; border-radius: 10px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    }
+    .mode-link {
+      color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 700;
+      padding: 8px 16px; border-radius: 8px;
+    }
+    .mode-link:hover { color: var(--text); }
+    .mode-link.active { color: #050508; background: #fff; }
+    .mode-link:focus-visible, .login-btn:focus-visible, .grade-btn:focus-visible, .ghost-btn:focus-visible {
+      outline: none; box-shadow: var(--focus-ring);
+    }
 
     .upload-panel {
       background: var(--glass-bg);
@@ -204,9 +213,14 @@
     <header class="header">
       <div>
         <div class="kicker">Official Clog grade</div>
-        <h1>Image Grader</h1>
+        <h1>The Money Machine</h1>
       </div>
-      <a class="back-link" href="/">← Generate</a>
+      <div class="header-right">
+        <nav class="mode-nav" aria-label="Sections">
+          <a href="/" class="mode-link">Generate</a>
+          <a href="/grader.html" class="mode-link active">Grade</a>
+        </nav>
+      </div>
     </header>
 
     <section class="upload-panel" id="upload-panel">

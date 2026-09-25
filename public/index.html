@@ -46,6 +46,7 @@
     }
 
     /* Focus-visible ring system */
+    .mode-link:focus-visible,
     .history-btn:focus-visible,
     .generate-btn:focus-visible,
     .bank-trigger:focus-visible,
@@ -187,27 +188,33 @@
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    .header-dot {
-      width: 14px; height: 14px;
-      background: #fff;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 10px;
-      box-shadow: 0 0 20px rgba(255,255,255,0.25), 0 0 60px rgba(255,255,255,0.15);
-      animation: dot-glow 3s ease-in-out infinite;
-    }
     @keyframes dot-glow {
       0%, 100% { box-shadow: 0 0 20px rgba(255,255,255,0.25), 0 0 60px rgba(255,255,255,0.15); }
       50% { box-shadow: 0 0 30px rgba(255,255,255,0.35), 0 0 90px rgba(255,255,255,0.2); }
     }
-    .header-right { display: flex; align-items: center; gap: 24px; }
-    .header-sub {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: var(--label-track);
-      color: var(--text-dim);
-      font-weight: 500;
+    .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+    .mode-nav {
+      display: flex;
+      padding: 3px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
     }
+    .mode-link {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 8px 16px;
+      border-radius: 8px;
+    }
+    .mode-link:hover { color: var(--text); }
+    .mode-link.active {
+      color: #050508;
+      background: #fff;
+    }
+    .mode-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
     .history-btn {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.1);
@@ -1487,12 +1494,14 @@
 
   <div class="container" id="main-container" style="display:none">
 
-    <div class="header">
-      <div><h1><span class="header-dot"></span>The Money Machine</h1></div>
+      <div class="header">
+      <h1>The Money Machine</h1>
       <div class="header-right">
-        <span class="header-sub">Fund Image Generation</span>
+        <nav class="mode-nav" aria-label="Sections">
+          <a href="/" class="mode-link active">Generate</a>
+          <a href="/grader.html" class="mode-link">Grade</a>
+        </nav>
         <a href="/api/sref-zip" class="sref-zip-btn" title="Download all style reference images as ZIP">&#8595; Sref Images</a>
-        <a href="/grader.html" class="history-btn">Grader</a>
         <a href="/settings.html" class="history-btn">Settings</a>
         <button class="history-btn" id="history-btn">Archive</button>
       </div>
