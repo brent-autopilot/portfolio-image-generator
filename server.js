@@ -15,6 +15,8 @@ import { validateConcepts, buildKeywordList } from './lib/anchor-validation.js';
 import { parseJsonObjectFromClaude, parseJsonArrayFromClaude } from './lib/parse-claude-json.js';
 import { sanitizeLockedAnchor } from './lib/fund-anchor-hints.js';
 import { normalizeClogVerdict, normalizeLiteralVerdict } from './lib/qc-verdict.js';
+import { buildGradeSystemPrompt } from './lib/load-clog-rubric.js';
+import { validateGradeResponse } from './lib/grade-schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1346,8 +1348,86 @@ async function runPipeline(job) {
 }
 
 // ---------------------------------------------------------------------------
+// Image grader — explain-mode Clog score (does not affect production QC)
+// ---------------------------------------------------------------------------
+const gradeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Image must be jpeg, png, webp, or gif'));
+  },
+});
+
+let gradeSystemPrompt = null;
+function getGradeSystemPrompt() {
+  if (!gradeSystemPrompt) gradeSystemPrompt = buildGradeSystemPrompt();
+  return gradeSystemPrompt;
+}
+
+async function gradeUploadedImage(buffer, mediaType, fundName) {
+  const context = fundName
+    ? `Optional fund name for context only: "${fundName}". It does not change the 5.0 threshold.`
+    : 'No fund name was provided. Grade the image on its own.';
+
+  let lastError = 'Grading failed';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const resp = await getAnthropic().messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 1200,
+      system: getGradeSystemPrompt(),
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') },
+          },
+          {
+            type: 'text',
+            text: attempt === 0
+              ? `Grade this single fund image. ${context}`
+              : `Your previous response was not valid grade JSON (${lastError}). Return only the JSON object. ${context}`,
+          },
+        ],
+      }],
+    });
+
+    const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const parsed = parseJsonObjectFromClaude(raw);
+    const validated = validateGradeResponse(parsed);
+    if (validated.ok) return validated.grade;
+    lastError = validated.error;
+    console.warn(`[grade] invalid response (attempt ${attempt + 1}): ${lastError}`);
+  }
+
+  throw new Error('Grading failed — the model did not return a valid grade. Try again.');
+}
+
+// ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
+app.post('/api/grade', (req, res) => {
+  gradeUpload.single('image')(req, res, async (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE' ? 'Image must be under 20MB' : (err.message || 'Upload failed');
+      return res.status(400).json({ error: message });
+    }
+    if (!req.file) return res.status(400).json({ error: 'Image is required' });
+
+    const fundName = typeof req.body?.fundName === 'string' ? req.body.fundName.trim().slice(0, 200) : '';
+    try {
+      const grade = await gradeUploadedImage(req.file.buffer, req.file.mimetype, fundName);
+      res.json(grade);
+    } catch (e) {
+      console.error('[grade]', e);
+      const status = /not configured|API key/i.test(e.message || '') ? 500 : 502;
+      res.status(status).json({ error: e.message || 'Grading failed' });
+    }
+  });
+});
+
 app.post('/api/generate', (req, res) => {
   const { fundName, fundThesis, styleJson, useStyleBank, bypassMode: rawBypass, manualStyle, manualInterpretation } = req.body;
 
