@@ -61,10 +61,40 @@ describe('validateGradeResponse', () => {
       strengths: [],
       weaknesses: [],
       redFlags: ['Focal subject has mangled geometry'],
+      bindingCap: 4,
     });
     assert.equal(result.ok, true);
     assert.equal(result.grade.verdict, 'FAIL');
     assert.equal(result.grade.tier, 'Poor');
+  });
+
+  it('caps a high craft score when a red-flag ceiling is set', () => {
+    const result = validateGradeResponse({
+      score: 6.2,
+      category: 'LOGO',
+      summary: 'Polished fantasy lockup built on a growth-arrow cliché.',
+      strengths: ['Legible type', 'Controlled palette'],
+      weaknesses: ['Upward arrow is a finance-poster symbol'],
+      redFlags: ['Upward arrow as growth metaphor'],
+      bindingCap: 3.5,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.grade.score, 3.5);
+    assert.equal(result.grade.verdict, 'FAIL');
+    assert.equal(result.grade.tier, 'Poor');
+    assert.equal(result.grade.bindingCap, 3.5);
+  });
+
+  it('rejects a named red flag with no binding cap', () => {
+    const result = validateGradeResponse({
+      score: 6.2,
+      category: 'LOGO',
+      summary: 'Noted the arrow and still passed.',
+      strengths: ['Legible type', 'Sharp rendering'],
+      weaknesses: ['Arrow cliché'],
+      redFlags: ['Upward arrow as growth metaphor'],
+    });
+    assert.equal(result.ok, false);
   });
 });
 
@@ -78,6 +108,8 @@ describe('buildGradeSystemPrompt', () => {
     const prompt = buildGradeSystemPrompt();
     assert.match(prompt, /Return ONLY one JSON object/);
     assert.match(prompt, /score ≥ 5\.0/);
+    assert.match(prompt, /A red flag is a ceiling/);
+    assert.match(prompt, /cap the image at 3\.5/);
     assert.doesNotMatch(prompt, /Is my draft response exactly `PASS` or `FAIL`/);
   });
 });

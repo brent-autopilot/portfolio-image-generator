@@ -503,6 +503,7 @@ pruneTimer.unref();
 // ---------------------------------------------------------------------------
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 const THEME_MODEL = CLAUDE_MODEL;
+const QC_MODEL = 'claude-opus-5-5';
 
 async function extractLockedAnchor(job, thesis) {
   const userContent = `Fund name: "${job.fundName}"
@@ -1154,8 +1155,6 @@ async function generateAllImages(job, { onGenComplete } = {}) {
 // ---------------------------------------------------------------------------
 // Stage 3 — Clog QC check (binary PASS/FAIL gate)
 // ---------------------------------------------------------------------------
-const QC_MODEL = CLAUDE_MODEL;
-
 const QC_CONCURRENCY = 6;
 
 async function qcLiteralAnchor(img, lockedAnchor, jobId) {
@@ -1180,7 +1179,7 @@ async function qcLiteralAnchor(img, lockedAnchor, jobId) {
 
   const resp = await getAnthropic().messages.create({
     model: QC_MODEL,
-    max_tokens: 5,
+    max_tokens: 2048,
     messages: [{
       role: 'user',
       content: [
@@ -1224,7 +1223,7 @@ async function qcOneImage(img, jobId, clogPrompt, lockedAnchor = null) {
 
       const resp = await getAnthropic().messages.create({
         model: QC_MODEL,
-        max_tokens: 10,
+        max_tokens: 2048,
         system: clogPrompt,
         messages: [
           {
@@ -1374,8 +1373,8 @@ async function gradeUploadedImage(buffer, mediaType, fundName) {
   let lastError = 'Grading failed';
   for (let attempt = 0; attempt < 2; attempt++) {
     const resp = await getAnthropic().messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 1200,
+      model: QC_MODEL,
+      max_tokens: 4096,
       system: getGradeSystemPrompt(),
       messages: [{
         role: 'user',

@@ -360,7 +360,7 @@
         </div>
         ${flags ? `<div class="flags"><h2 class="kicker" style="margin-bottom:8px">Red flags</h2>${flags}</div>` : ''}
         ${bars ? `<div class="bars">${bars}</div>` : ''}
-        ${(grade.capsApplied || []).length ? `<p class="hint" style="margin-top:14px">Caps applied: ${esc(grade.capsApplied.join(' · '))}</p>` : ''}
+        ${(grade.bindingCap != null || (grade.capsApplied || []).length) ? `<p class="hint" style="margin-top:14px">${grade.bindingCap != null ? `Score ceiling ${esc(Number(grade.bindingCap).toFixed(1))}` : ''}${(grade.capsApplied || []).length ? `${grade.bindingCap != null ? ' · ' : ''}Caps applied: ${esc(grade.capsApplied.join(' · '))}` : ''}</p>` : ''}
         <div class="again"><button class="ghost-btn" id="again-btn" type="button">Grade another</button></div>
       `;
       document.getElementById('again-btn').addEventListener('click', reset);

@@ -151,6 +151,8 @@ If the Pre-Screen flags any pattern below, the rubric is applied with explicit a
 
 The Pre-Screen does not override the rubric. It does not turn FAILs into PASSes by fiat. It only prevents the pattern-matching shortcuts that produce false negatives on legitimate work. If the rubric, applied with attention to positive markers, scores the image below 5.0, it fails. The Pre-Screen ensures the rubric is applied to the actual image, not to a fast misread of it.
 
+The Pre-Screen also does not soften a fired red flag or a Section 9 cap. High craft, sharp type, and a coherent palette are recorded as strengths. They do not delay the cap, and they do not move a capped image up into PASS.
+
 ---
 
 ## SECTION 5. IMAGE CATEGORIES
@@ -204,6 +206,8 @@ The one exception: if the background treatment makes the logo text or mark illeg
 - **5–6 (Acceptable):** Template-feeling but functional. Generic design language. Minor legibility issues at small sizes.
 - **3–4 (Poor):** Obviously template-generated or AI-default. Illegible or ambiguous text. Pixelated or low resolution. Cliché symbolism.
 - **0–2 (Unacceptable):** Text so distorted it misreads. Resolution visually offensive. Placeholder or lorem ipsum present. Obvious AI generation artifacts.
+
+**Execution does not outrank the band.** Clean rendering, legible type, and a consistent palette keep a mark out of the 0–2 band. They do not promote cliché symbolism or novelty illustration from 3–4 into 5–6. The 5–6 band is for generic-but-professional marks that would not embarrass an institutional marketplace. A polished crest, medallion, or fantasy/gaming lockup built from finance-poster symbols stays in 3–4 even when the rendering is sharp.
 
 **Logo Red Flags**
 
@@ -382,6 +386,14 @@ There are no other composite-specific overrides. The weighted average, with the 
 
 Score caps express specific quality failures as ceilings on element or overall scores. Caps drive the score toward FAIL when triggered; they are not independent FAIL paths.
 
+### 9.0 A red flag is a ceiling
+
+Naming a red flag and then scoring above its cap is an error, not a judgment call. The overall score is the minimum of the uncapped score and every applicable cap. Strengths — resolution, typography, palette, thematic coherence, "high craft" — are written down. They do not lift the score above the cap.
+
+A symbol is covered when it is visually prominent: the main object, or a major part of a logo, crest, medallion, or lockup. It does not have to be the only thing in the frame. Categorizing the image as LOGO does not retire an aesthetic cliché flag for a symbol inside that logo.
+
+Finance-metaphor clichés share one ceiling of 3.5: upward arrows, rockets, globes, handshakes, chess pieces, and light bulbs used as growth, reach, strategy, or ideas. A polished fantasy, gaming, or novelty treatment of those symbols is still that ceiling.
+
 ### 9.1 Multi-Cap Precedence
 
 When multiple caps apply to a single element or the overall image, **the lowest cap is binding.** A logo that is both pixelated (cap 4.0) and contains a generic gradient blob (cap 4.5) is capped at 4.0.
@@ -392,7 +404,7 @@ When multiple caps apply to a single element or the overall image, **the lowest 
 |---|---|
 | Logo text misreads as different word | 5.0 |
 | Logo visibly pixelated | 4.0 |
-| Generic globe / arrow / rocket / handshake as primary subject | 3.5 |
+| Prominent finance-metaphor cliché: upward arrow, rocket, globe, handshake, chess piece, or light bulb, including as a major element of a logo or crest | 3.5 |
 | Stock chart with no real data labels (DATA-VIZ presented as factual) | 4.0 |
 | Obvious Canva default template | 5.0 |
 | Lorem ipsum visible | 2.0 |
@@ -433,7 +445,7 @@ Before sending any response, Claude runs this checklist silently:
 4. Did I run the Pre-Screen (Section 4) before applying the rubric? If no → run it now.
 5. **For Pattern A specifically: did I apply the strict reading rule (3+ markers, no weak/generous interpretations)?** If I counted any marker by reaching to justify it → re-do without that marker.
 6. **Did I check whether the focal subject of the image contains obvious mangled or broken details?** This is a check on the *subject* (the element carrying visual weight), not on whether the image was AI-generated. If the focal subject has visibly broken details that read as "wrong" rather than as stylization → apply the broken-subject red flag (Section 7.3) and the corresponding cap of 4.0 (Section 9.2).
-7. Did I apply the lowest-binding-cap rule when multiple caps apply (Section 9.1)? If no → re-apply.
+7. Did I apply the lowest-binding-cap rule when multiple caps apply (Section 9.1)? If a finance-metaphor cliché is visually prominent, is the score at or below 3.5? If no → re-apply. Craft does not raise a capped score.
 8. Did I apply the single-element floor cap (Section 9.3) for any element scoring below 2.0? If applicable → confirm cap is in effect.
 9. Is my draft response exactly `PASS` or `FAIL`, with no other characters? If no → reduce to one token, exact casing.
 
