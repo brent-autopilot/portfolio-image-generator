@@ -17,6 +17,7 @@ import { sanitizeLockedAnchor } from './lib/fund-anchor-hints.js';
 import { normalizeClogVerdict, normalizeLiteralVerdict } from './lib/qc-verdict.js';
 import { buildGradeSystemPrompt } from './lib/load-clog-rubric.js';
 import { validateGradeResponse } from './lib/grade-schema.js';
+import { withMidjourneyVersion } from './lib/mj-prompt.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -753,7 +754,7 @@ async function submitMidjourneyJob(prompt, { profile = null, sref = null, sw = n
 
   const profileSuffix = profile ? ` ${profile}` : '';
   const srefSuffix = sref ? ` --sref ${sref} --sw ${sw ?? STYLE_WEIGHT}` : '';
-  const fullPrompt = `${prompt}${profileSuffix}${srefSuffix}`;
+  const fullPrompt = withMidjourneyVersion(`${prompt}${profileSuffix}${srefSuffix}`);
   console.log(`[midjourney] Submitting prompt (${fullPrompt.length} chars): ${fullPrompt.slice(0, 300)}...`);
 
   const body = { text: fullPrompt };
