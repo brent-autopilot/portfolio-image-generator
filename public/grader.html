@@ -184,7 +184,7 @@
     .bar-track { height: 4px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; }
     .bar-fill { height: 100%; background: rgba(255,255,255,0.7); }
     .bar-row span:last-child { font-family: var(--mono); text-align: right; }
-    .again { margin-top: 22px; }
+    .again { margin-top: 22px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .ghost-btn { background: transparent; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
 
     @media (max-width: 720px) {
@@ -256,6 +256,7 @@
 
     let selectedFile = null;
     let previewUrl = null;
+    let currentGrade = null;
 
     function esc(s) {
       return String(s ?? '').replace(/[&<>"']/g, (c) => ({
@@ -315,8 +316,249 @@
       previewUrl = URL.createObjectURL(file);
       dropCopy.innerHTML = `<img src="${previewUrl}" alt="Selected image preview" />`;
       gradeBtn.disabled = false;
+      currentGrade = null;
       resultEl.classList.add('hidden');
       resultEl.innerHTML = '';
+    }
+
+    function wrapLines(ctx, text, maxWidth) {
+      const words = String(text || '').split(/\s+/).filter(Boolean);
+      const lines = [];
+      let line = '';
+      for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (ctx.measureText(next).width > maxWidth && line) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = next;
+        }
+      }
+      if (line) lines.push(line);
+      return lines.length ? lines : [''];
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Could not read the graded image'));
+        img.src = src;
+      });
+    }
+
+    async function certificateBlob(grade) {
+      await document.fonts.ready;
+      const img = await loadImage(previewUrl);
+      const W = 1600;
+      const pad = 72;
+      const thumb = 280;
+      const measure = document.createElement('canvas').getContext('2d');
+      measure.font = '500 28px Satoshi, system-ui, sans-serif';
+      const summaryLines = wrapLines(measure, grade.summary, 620);
+      measure.font = '400 26px Satoshi, system-ui, sans-serif';
+      const strengths = (grade.strengths?.length ? grade.strengths : ['None noted.']).map((t) => wrapLines(measure, t, 640));
+      const weaknesses = (grade.weaknesses?.length ? grade.weaknesses : ['None noted.']).map((t) => wrapLines(measure, t, 640));
+      const flags = (grade.redFlags || []).map((t) => wrapLines(measure, t, 1320));
+      const bars = grade.elementScores || [];
+
+      const reasonHeight = Math.max(
+        strengths.reduce((n, lines) => n + lines.length * 34 + 18, 48),
+        weaknesses.reduce((n, lines) => n + lines.length * 34 + 18, 48)
+      );
+      const flagHeight = flags.length ? 56 + flags.reduce((n, lines) => n + lines.length * 32 + 10, 0) : 0;
+      const barHeight = bars.length ? 24 + bars.length * 36 : 0;
+      const capHeight = grade.bindingCap != null || (grade.capsApplied || []).length ? 40 : 0;
+      const headerBlock = Math.max(thumb, 210 + summaryLines.length * 36);
+      const H = pad + headerBlock + 56 + reasonHeight + flagHeight + barHeight + capHeight + 120;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#050508';
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(28, 28, W - 56, H - 56);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.strokeRect(40, 40, W - 80, H - 80);
+
+      const sx = img.width / thumb;
+      const sy = img.height / thumb;
+      const scale = Math.max(sx, sy);
+      const sw = thumb * scale;
+      const sh = thumb * scale;
+      const ox = (img.width - sw) / 2;
+      const oy = (img.height - sh) / 2;
+      ctx.drawImage(img, ox, oy, sw, sh, pad, pad, thumb, thumb);
+
+      const pass = grade.verdict === 'PASS';
+      const accent = pass ? '#34d399' : '#f87171';
+      let x = pad + thumb + 48;
+      let y = pad + 8;
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '500 18px "JetBrains Mono", monospace';
+      ctx.fillText('CLOG CERTIFICATE', x, y + 18);
+      y += 78;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 120px Satoshi, system-ui, sans-serif';
+      const scoreText = Number(grade.score).toFixed(1);
+      ctx.fillText(scoreText, x, y);
+      const scoreW = ctx.measureText(scoreText).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '500 36px Satoshi, system-ui, sans-serif';
+      ctx.fillText('/10', x + scoreW + 8, y - 8);
+      y += 36;
+      ctx.fillStyle = accent;
+      ctx.font = '500 22px "JetBrains Mono", monospace';
+      ctx.fillText(String(grade.tier || '').toUpperCase(), x, y);
+      y += 40;
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '500 28px Satoshi, system-ui, sans-serif';
+      for (const line of summaryLines) {
+        ctx.fillText(line, x, y);
+        y += 36;
+      }
+      y += 16;
+      const cat = String(grade.category || '');
+      ctx.font = '500 18px "JetBrains Mono", monospace';
+      const catW = ctx.measureText(cat).width + 28;
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.strokeRect(x, y - 22, catW, 34);
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillText(cat, x + 14, y);
+
+      ctx.save();
+      ctx.translate(W - pad - 70, pad + 130);
+      ctx.rotate(-12 * Math.PI / 180);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 78, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 66, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = accent;
+      ctx.font = '900 28px Satoshi, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(grade.verdict, 0, 2);
+      ctx.restore();
+
+      y = pad + headerBlock + 36;
+      const colW = (W - pad * 2 - 48) / 2;
+      function drawColumn(title, groups, left) {
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '700 18px Satoshi, system-ui, sans-serif';
+        ctx.fillText(title, left, y);
+        let cy = y + 28;
+        ctx.font = '400 26px Satoshi, system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.88)';
+        for (const lines of groups) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+          ctx.beginPath();
+          ctx.moveTo(left, cy - 22);
+          ctx.lineTo(left + colW, cy - 22);
+          ctx.stroke();
+          for (const line of lines) {
+            ctx.fillText(line, left, cy);
+            cy += 34;
+          }
+          cy += 18;
+        }
+      }
+      drawColumn('WHY IT WORKS', strengths, pad);
+      drawColumn('WHAT HOLDS IT BACK', weaknesses, pad + colW + 48);
+      y += reasonHeight + 8;
+
+      if (flags.length) {
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '700 18px Satoshi, system-ui, sans-serif';
+        ctx.fillText('RED FLAGS', pad, y);
+        y += 28;
+        ctx.font = '400 24px Satoshi, system-ui, sans-serif';
+        ctx.fillStyle = '#fecaca';
+        for (const lines of flags) {
+          ctx.strokeStyle = 'rgba(248,113,113,0.35)';
+          ctx.beginPath();
+          ctx.moveTo(pad, y - 20);
+          ctx.lineTo(W - pad, y - 20);
+          ctx.stroke();
+          for (const line of lines) {
+            ctx.fillText(line, pad, y);
+            y += 32;
+          }
+          y += 10;
+        }
+      }
+
+      if (bars.length) {
+        y += 8;
+        for (const el of bars) {
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.font = '400 22px Satoshi, system-ui, sans-serif';
+          ctx.fillText(el.name, pad, y);
+          const trackX = pad + 220;
+          const trackW = W - pad - trackX - 80;
+          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          ctx.fillRect(trackX, y - 12, trackW, 8);
+          ctx.fillStyle = 'rgba(255,255,255,0.75)';
+          ctx.fillRect(trackX, y - 12, trackW * Math.max(0, Math.min(1, el.score / 10)), 8);
+          ctx.fillStyle = 'rgba(255,255,255,0.7)';
+          ctx.font = '500 20px "JetBrains Mono", monospace';
+          ctx.textAlign = 'right';
+          ctx.fillText(Number(el.score).toFixed(1), W - pad, y);
+          ctx.textAlign = 'left';
+          y += 36;
+        }
+      }
+
+      if (grade.bindingCap != null || (grade.capsApplied || []).length) {
+        const bits = [];
+        if (grade.bindingCap != null) bits.push(`Score ceiling ${Number(grade.bindingCap).toFixed(1)}`);
+        if ((grade.capsApplied || []).length) bits.push(`Caps applied: ${grade.capsApplied.join(' · ')}`);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '400 20px "JetBrains Mono", monospace';
+        ctx.fillText(bits.join('  ·  '), pad, y + 8);
+      }
+
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      ctx.font = '500 18px "JetBrains Mono", monospace';
+      ctx.fillText('THE MONEY MACHINE', pad, H - 56);
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('Could not build the certificate image');
+      return blob;
+    }
+
+    async function downloadCertificate() {
+      if (!currentGrade || !previewUrl) return;
+      const btn = document.getElementById('download-btn');
+      btn.disabled = true;
+      btn.textContent = 'Preparing…';
+      try {
+        const blob = await certificateBlob(currentGrade);
+        const fund = fundName.value.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+        const name = ['clog-certificate', fund, Number(currentGrade.score).toFixed(1), currentGrade.verdict]
+          .filter(Boolean)
+          .join('-') + '.png';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        showError(err.message || 'Download failed');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Download PNG';
+      }
     }
 
     function list(items) {
@@ -325,6 +567,7 @@
     }
 
     function renderGrade(grade) {
+      currentGrade = grade;
       const pass = grade.verdict === 'PASS';
       const bars = (grade.elementScores || []).map((el) => `
         <div class="bar-row">
@@ -361,14 +604,19 @@
         ${flags ? `<div class="flags"><h2 class="kicker" style="margin-bottom:8px">Red flags</h2>${flags}</div>` : ''}
         ${bars ? `<div class="bars">${bars}</div>` : ''}
         ${(grade.bindingCap != null || (grade.capsApplied || []).length) ? `<p class="hint" style="margin-top:14px">${grade.bindingCap != null ? `Score ceiling ${esc(Number(grade.bindingCap).toFixed(1))}` : ''}${(grade.capsApplied || []).length ? `${grade.bindingCap != null ? ' · ' : ''}Caps applied: ${esc(grade.capsApplied.join(' · '))}` : ''}</p>` : ''}
-        <div class="again"><button class="ghost-btn" id="again-btn" type="button">Grade another</button></div>
+        <div class="again">
+          <button class="grade-btn" id="download-btn" type="button">Download PNG</button>
+          <button class="ghost-btn" id="again-btn" type="button">Grade another</button>
+        </div>
       `;
+      document.getElementById('download-btn').addEventListener('click', downloadCertificate);
       document.getElementById('again-btn').addEventListener('click', reset);
       resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function reset() {
       selectedFile = null;
+      currentGrade = null;
       fileInput.value = '';
       gradeBtn.disabled = true;
       dropCopy.innerHTML = `<strong>Upload a fund image</strong><div class="hint">JPEG, PNG, WEBP, or GIF · 20MB max</div>`;
