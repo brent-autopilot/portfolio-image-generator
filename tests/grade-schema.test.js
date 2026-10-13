@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { tierFromScore, verdictFromScore, validateGradeResponse } from '../lib/grade-schema.js';
-import { buildGradeSystemPrompt, loadClogRubricSections } from '../lib/load-clog-rubric.js';
+import { readFileSync } from 'node:fs';
+import { tierFromScore, verdictFromScore, validateGradeResponse, PILOT_CATEGORIES, pilotGradeError } from '../lib/grade-schema.js';
+import { buildGradeSystemPrompt, loadClogRubricSections, loadPilotPhotoGradePrompt } from '../lib/load-clog-rubric.js';
 
 describe('tierFromScore', () => {
   it('maps Clog score bands', () => {
@@ -85,6 +86,27 @@ describe('validateGradeResponse', () => {
     assert.equal(result.grade.bindingCap, 3.5);
   });
 
+  it('rejects HEADSHOT on the fund grader', () => {
+    const result = validateGradeResponse({ ...base, category: 'HEADSHOT' });
+    assert.equal(result.ok, false);
+  });
+
+  it('accepts HEADSHOT only for the pilot category set', () => {
+    const result = validateGradeResponse({
+      ...base,
+      category: 'headshot',
+      elementScores: [
+        { name: 'face', score: 8 },
+        { name: 'light', score: 7 },
+        { name: 'crop', score: 7.5 },
+        { name: 'background', score: 6 },
+      ],
+    }, { categories: PILOT_CATEGORIES });
+    assert.equal(result.ok, true);
+    assert.equal(result.grade.category, 'HEADSHOT');
+    assert.equal(result.grade.verdict, 'PASS');
+  });
+
   it('rejects a named red flag with no binding cap', () => {
     const result = validateGradeResponse({
       score: 6.2,
@@ -95,6 +117,27 @@ describe('validateGradeResponse', () => {
       redFlags: ['Upward arrow as growth metaphor'],
     });
     assert.equal(result.ok, false);
+  });
+});
+
+describe('pilotGradeError', () => {
+  const elements = [
+    { name: 'face', score: 8 },
+    { name: 'light', score: 7 },
+    { name: 'crop', score: 7 },
+    { name: 'background', score: 6 },
+  ];
+
+  it('accepts a portrait whose score stays under the face', () => {
+    assert.equal(pilotGradeError({ score: 7.4, elementScores: elements }), null);
+  });
+
+  it('rejects a score the face cannot support', () => {
+    assert.match(pilotGradeError({ score: 8.1, elementScores: elements }), /face element/);
+  });
+
+  it('requires every portrait element', () => {
+    assert.match(pilotGradeError({ score: 7, elementScores: elements.slice(1) }), /face/);
   });
 });
 
@@ -111,5 +154,20 @@ describe('buildGradeSystemPrompt', () => {
     assert.match(prompt, /A red flag is a ceiling/);
     assert.match(prompt, /cap the image at 3\.5/);
     assert.doesNotMatch(prompt, /Is my draft response exactly `PASS` or `FAIL`/);
+  });
+
+  it('keeps the pilot prompt separate from the fund rubric', () => {
+    const prompt = loadPilotPhotoGradePrompt();
+    assert.match(prompt, /HEADSHOT/);
+    assert.match(prompt, /cannot exceed the `face` score/);
+    assert.match(prompt, /No identifiable face/);
+    assert.match(prompt, /Not a photograph of a person/);
+    assert.match(prompt, /3\.5/);
+    assert.match(prompt, /4\.0/);
+    assert.doesNotMatch(prompt, /LOGO-GRID/);
+    assert.doesNotMatch(prompt, /## SECTION 11/);
+    assert.doesNotMatch(prompt, /finance-metaphor/);
+    const onDisk = readFileSync(new URL('../prompts/pilot-photo-grade.md', import.meta.url), 'utf8');
+    assert.equal(prompt, onDisk.trim());
   });
 });

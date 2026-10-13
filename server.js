@@ -15,8 +15,8 @@ import { validateConcepts, buildKeywordList } from './lib/anchor-validation.js';
 import { parseJsonObjectFromClaude, parseJsonArrayFromClaude } from './lib/parse-claude-json.js';
 import { sanitizeLockedAnchor } from './lib/fund-anchor-hints.js';
 import { normalizeClogVerdict, normalizeLiteralVerdict } from './lib/qc-verdict.js';
-import { buildGradeSystemPrompt } from './lib/load-clog-rubric.js';
-import { validateGradeResponse } from './lib/grade-schema.js';
+import { buildGradeSystemPrompt, loadPilotPhotoGradePrompt } from './lib/load-clog-rubric.js';
+import { validateGradeResponse, PILOT_CATEGORIES, pilotGradeError } from './lib/grade-schema.js';
 import { withMidjourneyVersion } from './lib/mj-prompt.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1366,17 +1366,19 @@ function getGradeSystemPrompt() {
   return gradeSystemPrompt;
 }
 
-async function gradeUploadedImage(buffer, mediaType, fundName) {
-  const context = fundName
-    ? `Optional fund name for context only: "${fundName}". It does not change the 5.0 threshold.`
-    : 'No fund name was provided. Grade the image on its own.';
+let pilotGradeSystemPrompt = null;
+function getPilotGradeSystemPrompt() {
+  if (!pilotGradeSystemPrompt) pilotGradeSystemPrompt = loadPilotPhotoGradePrompt();
+  return pilotGradeSystemPrompt;
+}
 
+async function requestImageGrade({ buffer, mediaType, system, userText, categories, logTag, accept }) {
   let lastError = 'Grading failed';
   for (let attempt = 0; attempt < 2; attempt++) {
     const resp = await getAnthropic().messages.create({
       model: QC_MODEL,
       max_tokens: 4096,
-      system: getGradeSystemPrompt(),
+      system,
       messages: [{
         role: 'user',
         content: [
@@ -1387,8 +1389,8 @@ async function gradeUploadedImage(buffer, mediaType, fundName) {
           {
             type: 'text',
             text: attempt === 0
-              ? `Grade this single fund image. ${context}`
-              : `Your previous response was not valid grade JSON (${lastError}). Return only the JSON object. ${context}`,
+              ? userText
+              : `Your previous response was not valid grade JSON (${lastError}). Return only the JSON object. ${userText}`,
           },
         ],
       }],
@@ -1396,37 +1398,86 @@ async function gradeUploadedImage(buffer, mediaType, fundName) {
 
     const raw = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     const parsed = parseJsonObjectFromClaude(raw);
-    const validated = validateGradeResponse(parsed);
-    if (validated.ok) return validated.grade;
-    lastError = validated.error;
-    console.warn(`[grade] invalid response (attempt ${attempt + 1}): ${lastError}`);
+    const validated = validateGradeResponse(parsed, categories ? { categories } : {});
+    if (!validated.ok) {
+      lastError = validated.error;
+      console.warn(`[${logTag}] invalid response (attempt ${attempt + 1}): ${lastError}`);
+      continue;
+    }
+    const extra = accept ? accept(validated.grade) : null;
+    if (extra) {
+      lastError = extra;
+      console.warn(`[${logTag}] invalid response (attempt ${attempt + 1}): ${lastError}`);
+      continue;
+    }
+    return validated.grade;
   }
 
   throw new Error('Grading failed — the model did not return a valid grade. Try again.');
 }
 
+async function gradeUploadedImage(buffer, mediaType, fundName) {
+  const context = fundName
+    ? `Optional fund name for context only: "${fundName}". It does not change the 5.0 threshold.`
+    : 'No fund name was provided. Grade the image on its own.';
+
+  return requestImageGrade({
+    buffer,
+    mediaType,
+    system: getGradeSystemPrompt(),
+    userText: `Grade this single fund image. ${context}`,
+    logTag: 'grade',
+  });
+}
+
+async function gradePilotPhoto(buffer, mediaType, pilotName) {
+  const context = pilotName
+    ? `Optional pilot name for context only: "${pilotName}". It does not change the 5.0 threshold.`
+    : 'No pilot name was provided. Grade the portrait on its own.';
+
+  return requestImageGrade({
+    buffer,
+    mediaType,
+    system: getPilotGradeSystemPrompt(),
+    userText: `Grade this single pilot profile photo. ${context}`,
+    categories: PILOT_CATEGORIES,
+    logTag: 'pilot-grade',
+    accept: pilotGradeError,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
-app.post('/api/grade', (req, res) => {
-  gradeUpload.single('image')(req, res, async (err) => {
-    if (err) {
-      const message = err.code === 'LIMIT_FILE_SIZE' ? 'Image must be under 20MB' : (err.message || 'Upload failed');
-      return res.status(400).json({ error: message });
-    }
-    if (!req.file) return res.status(400).json({ error: 'Image is required' });
+function handleGradeUpload(logTag, readName, grade) {
+  return (req, res) => {
+    gradeUpload.single('image')(req, res, async (err) => {
+      if (err) {
+        const message = err.code === 'LIMIT_FILE_SIZE' ? 'Image must be under 20MB' : (err.message || 'Upload failed');
+        return res.status(400).json({ error: message });
+      }
+      if (!req.file) return res.status(400).json({ error: 'Image is required' });
 
-    const fundName = typeof req.body?.fundName === 'string' ? req.body.fundName.trim().slice(0, 200) : '';
-    try {
-      const grade = await gradeUploadedImage(req.file.buffer, req.file.mimetype, fundName);
-      res.json(grade);
-    } catch (e) {
-      console.error('[grade]', e);
-      const status = /not configured|API key/i.test(e.message || '') ? 500 : 502;
-      res.status(status).json({ error: e.message || 'Grading failed' });
-    }
-  });
-});
+      const name = readName(req);
+      try {
+        const result = await grade(req.file.buffer, req.file.mimetype, name);
+        res.json(result);
+      } catch (e) {
+        console.error(`[${logTag}]`, e);
+        const status = /not configured|API key/i.test(e.message || '') ? 500 : 502;
+        res.status(status).json({ error: e.message || 'Grading failed' });
+      }
+    });
+  };
+}
+
+function optionalName(req, field) {
+  return typeof req.body?.[field] === 'string' ? req.body[field].trim().slice(0, 200) : '';
+}
+
+app.post('/api/grade', handleGradeUpload('grade', (req) => optionalName(req, 'fundName'), gradeUploadedImage));
+
+app.post('/api/grade-pilot', handleGradeUpload('pilot-grade', (req) => optionalName(req, 'pilotName'), gradePilotPhoto));
 
 app.post('/api/generate', (req, res) => {
   const { fundName, fundThesis, styleJson, useStyleBank, bypassMode: rawBypass, manualStyle, manualInterpretation } = req.body;
