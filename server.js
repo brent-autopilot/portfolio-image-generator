@@ -142,6 +142,10 @@ if (!existsSync(QUADRANT_DIR)) mkdirSync(QUADRANT_DIR, { recursive: true });
 
 const LEGNEXT_BASE = 'https://api.legnext.ai/api/v1';
 const NUM_CONCEPTS = 3;
+// Each concept is submitted this many times. Midjourney returns 4 images per
+// submission, so a run is 3 concepts × 3 rolls × 4 images = 36.
+const ROLLS_PER_CONCEPT = 3;
+const MJ_CONCURRENCY = 3;
 const JOB_TTL_MS = 30 * 60 * 1000;
 const JOB_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_POLL_ATTEMPTS = 60;
@@ -1002,6 +1006,7 @@ function mapQuadrantImages(imageUrls, grid, task, profiles, job, gridIndex) {
     prompt: concept.prompt,
     style: concept.style || null,
     interpretation: concept.interpretation || null,
+    variationIndex: task.variationIndex ?? 0,
     genIndex: gi,
     profile: profiles[gi]?.tag || null,
     profileLabel: profiles[gi]?.label || null,
@@ -1036,12 +1041,26 @@ async function buildImagesFromGenResult(grid, task, gridIndex, profiles, job) {
     prompt: task.concept.prompt,
     style: task.concept.style || null,
     interpretation: task.concept.interpretation || null,
+    variationIndex: task.variationIndex ?? 0,
     genIndex: task.genIndex,
     profile: profiles[task.genIndex]?.tag || null,
     profileLabel: profiles[task.genIndex]?.label || null,
     srefName: task.usedSref ? (job.actualSrefs[task.genIndex] || null) : null,
     srefLost: !!task.srefLost,
   }));
+}
+
+async function mapPool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 async function generateAllImages(job, { onGenComplete } = {}) {
@@ -1078,29 +1097,30 @@ async function generateAllImages(job, { onGenComplete } = {}) {
   job.profileTags = profiles.map((p) => p.tag);
   console.log(`[job ${job.id}] Profiles: ${profiles.map((p) => p.label).join(', ')}`);
 
-  // Each gen runs submit→poll as a unit. Sref jobs get up to SREF_MAX_RETRIES
-  // resubmissions on moderation rejects before falling back to no-sref.
-  // Gen 1 has no sref so it runs in parallel with Gen 2 & 3.
+  // Each concept is rolled ROLLS_PER_CONCEPT times with the same prompt, profile,
+  // and sref. In-flight Midjourney jobs stay at the previous 3-wide pace.
   let gridIndexCounter = 0;
-  let completedGens = 0;
+  let completedGrids = 0;
+  const srefKept = Array(job.concepts.length).fill(false);
 
   const processGenResult = async (r) => {
     if (!r) return [];
 
     const wantedSref = r.genIndex >= 1 && !!srefs[r.genIndex - 1];
     const srefLost = wantedSref && !r.usedSref;
-    if (srefLost) job.actualSrefs[r.genIndex] = null;
+    if (wantedSref && r.usedSref) srefKept[r.genIndex] = true;
 
     const task = {
       concept: r.concept,
       genIndex: r.genIndex,
+      variationIndex: r.variationIndex,
       usedSref: r.usedSref,
       srefLost,
     };
 
     const gridIdx = gridIndexCounter++;
     const images = await buildImagesFromGenResult(r.grid, task, gridIdx, profiles, job);
-    completedGens++;
+    completedGrids++;
 
     if (onGenComplete && images.length > 0) {
       await onGenComplete(images);
@@ -1109,7 +1129,15 @@ async function generateAllImages(job, { onGenComplete } = {}) {
     return images;
   };
 
-  const genPromises = job.concepts.map((c, i) => {
+  const rolls = [];
+  for (let i = 0; i < job.concepts.length; i++) {
+    for (let v = 0; v < ROLLS_PER_CONCEPT; v++) {
+      rolls.push({ concept: job.concepts[i], genIndex: i, variationIndex: v });
+    }
+  }
+
+  async function runRoll(roll) {
+    const { concept: c, genIndex: i, variationIndex: v } = roll;
     const opts = { profile: profiles[i].tag };
     if (i >= 1) {
       const srefEntry = srefs[i - 1];
@@ -1118,28 +1146,32 @@ async function generateAllImages(job, { onGenComplete } = {}) {
         opts.sw = STYLE_WEIGHT;
       }
     }
-    const label = `job ${job.id} Gen ${i + 1}`;
-    return submitAndPollWithSrefRetry(c.prompt, opts, label)
-      .then((result) => ({ ...result, concept: c, genIndex: i }))
-      .catch((err) => {
-        console.error(`[${label}] Failed entirely: ${err.message}`);
-        return null;
-      })
-      .then(processGenResult);
-  });
+    const label = `job ${job.id} Gen ${i + 1} roll ${v + 1}`;
+    try {
+      const result = await submitAndPollWithSrefRetry(c.prompt, opts, label);
+      return processGenResult({ ...result, concept: c, genIndex: i, variationIndex: v });
+    } catch (err) {
+      console.error(`[${label}] Failed entirely: ${err.message}`);
+      return [];
+    }
+  }
 
-  const genImageBatches = await Promise.all(genPromises);
+  const genImageBatches = await mapPool(rolls, MJ_CONCURRENCY, runRoll);
   const allImages = genImageBatches.flat();
 
-  job.mjTaskIds = job.concepts.map((c) => c.prompt?.slice(0, 40) || 'unknown');
-  console.log(`[job ${job.id}] ${completedGens}/${job.concepts.length} grids complete, ${allImages.length} images`);
+  for (let i = 1; i < job.concepts.length; i++) {
+    if (srefs[i - 1] && !srefKept[i]) job.actualSrefs[i] = null;
+  }
+
+  job.mjTaskIds = rolls.map((roll) => `gen${roll.genIndex + 1}-roll${roll.variationIndex + 1}`);
+  console.log(`[job ${job.id}] ${completedGrids}/${rolls.length} grids complete, ${allImages.length} images`);
 
   if (allImages.length === 0) {
     throw new Error('All Midjourney image generations failed');
   }
 
-  if (completedGens < job.concepts.length) {
-    const msg = `Only ${completedGens}/${job.concepts.length} image generations succeeded`;
+  if (completedGrids < rolls.length) {
+    const msg = `Only ${completedGrids}/${rolls.length} image generations succeeded`;
     job.warnings.push(msg);
     console.warn(`[job ${job.id}] ${msg}`);
   }

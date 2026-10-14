@@ -823,7 +823,7 @@
     .gallery-scatter {
       position: relative;
       width: 100%;
-      height: 1600px;
+      height: var(--scatter-height, 1600px);
       overflow: visible;
       margin-bottom: 40px;
     }
@@ -1962,25 +1962,26 @@
       return card;
     }
 
-    const GALLERY_SLOTS = [
-      { x: 3,  y: 20,   depth: 0.35 },
-      { x: 36, y: 0,    depth: 0.72 },
-      { x: 68, y: 40,   depth: 1.0  },
-      { x: 5,  y: 420,  depth: 0.90 },
-      { x: 38, y: 390,  depth: 0.42 },
-      { x: 67, y: 440,  depth: 0.65 },
-      { x: 2,  y: 800,  depth: 0.55 },
-      { x: 37, y: 770,  depth: 0.95 },
-      { x: 69, y: 820,  depth: 0.30 },
-      { x: 4,  y: 1180, depth: 0.80 },
-      { x: 35, y: 1150, depth: 0.48 },
-      { x: 68, y: 1200, depth: 0.60 },
-    ];
+    const GALLERY_DEPTHS = [0.35, 0.72, 1, 0.9, 0.42, 0.65, 0.55, 0.95, 0.3, 0.8, 0.48, 0.6];
+    const GALLERY_ROW = 400;
+
+    function gallerySlot(index) {
+      const row = Math.floor(index / 3);
+      const col = index % 3;
+      const xBase = [3, 36, 68][col];
+      const yJitter = [20, 0, 40][col];
+      const xJitter = [0, 2, -1, 1][row % 4];
+      return {
+        x: xBase + xJitter,
+        y: row * GALLERY_ROW + yJitter,
+        depth: GALLERY_DEPTHS[index % GALLERY_DEPTHS.length],
+      };
+    }
 
     let _currentJobId = null;
 
     function renderGalleryCard(img, index) {
-      const slot = GALLERY_SLOTS[index % GALLERY_SLOTS.length];
+      const slot = gallerySlot(index);
       const rotation = (index % 2 === 0 ? 1 : -1) * (1 + (index * 0.7) % 2.5);
       const card = document.createElement('div');
 
@@ -1993,7 +1994,7 @@
       card.style.top = `${slot.y}px`;
       card.style.zIndex = Math.round(slot.depth * 10);
       card.style.transform = `rotate(${rotation.toFixed(1)}deg)`;
-      card.style.animationDelay = `${index * 0.12}s`;
+      card.style.animationDelay = `${Math.min(index * 0.04, 1.2)}s`;
       card.dataset.baseRotation = rotation.toFixed(1);
 
       let verdictLabel = '';
@@ -2196,9 +2197,11 @@
 
       for (const gi of genIndices) {
         const group = genGroups[gi];
+        group.sort((a, b) => (a.variationIndex ?? 0) - (b.variationIndex ?? 0) || (a.imageNo ?? 0) - (b.imageNo ?? 0));
         const first = group[0] || {};
         const anySrefLost = group.some((img) => img.srefLost);
-        const info = { style: first.style || '', interpretation: first.interpretation || '', srefName: first.srefName || '', srefLost: anySrefLost };
+        const srefName = group.find((img) => img.srefName)?.srefName || '';
+        const info = { style: first.style || '', interpretation: first.interpretation || '', srefName, srefLost: anySrefLost };
         ratingSidebar.appendChild(createRatingStrip(gi, info));
 
         for (const img of group) {
@@ -2207,6 +2210,8 @@
         }
       }
 
+      const rows = Math.max(1, Math.ceil(globalIndex / 3));
+      container.style.setProperty('--scatter-height', `${(rows - 1) * GALLERY_ROW + 460}px`);
       ratingSidebar.classList.remove('hidden');
       initGalleryParallax(container);
     }
