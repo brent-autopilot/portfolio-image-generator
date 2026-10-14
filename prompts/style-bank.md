@@ -7,7 +7,7 @@ STYLE BANK AUTHORING GUIDE
 
 WHAT THIS IS:
 Each line below is a standalone visual style directive. Three are randomly
-selected per generation run — one per image concept. The directive tells
+selected per generation run — one shared by that generation's nine concepts. The directive tells
 Claude how to ART-DIRECT the image: the medium, technique, rendering
 approach, lighting, texture, and color treatment. The fund thesis (provided
 by the user) determines WHAT the image depicts. The style directive

@@ -1,6 +1,6 @@
 # Profile Bank
 
-<!-- One Midjourney --profile tag per line (label | tag). Three are randomly selected per run — one per generation. -->
+<!-- One Midjourney --profile tag per line (label | tag). Three profiles are assigned per run, one per generation. That generation's nine concepts share it. -->
 
 ---
 

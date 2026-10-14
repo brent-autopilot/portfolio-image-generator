@@ -703,7 +703,7 @@
       from { opacity: 0; transform: translateX(-12px); }
       to { opacity: 1; transform: translateX(0); }
     }
-    .concept-num { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.5); width: 20px; flex-shrink: 0; }
+    .concept-num { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.5); width: 48px; flex-shrink: 0; }
     .concept-label { font-size: 15px; font-weight: 700; color: var(--text); }
     .concept-style {
       font-family: var(--mono);
@@ -2201,7 +2201,13 @@
         const first = group[0] || {};
         const anySrefLost = group.some((img) => img.srefLost);
         const srefName = group.find((img) => img.srefName)?.srefName || '';
-        const info = { style: first.style || '', interpretation: first.interpretation || '', srefName, srefLost: anySrefLost };
+        const interps = [...new Set(group.map((img) => img.interpretation).filter(Boolean))];
+        const info = {
+          style: first.style || '',
+          interpretation: interps.length === 1 ? interps[0] : '',
+          srefName,
+          srefLost: anySrefLost,
+        };
         ratingSidebar.appendChild(createRatingStrip(gi, info));
 
         for (const img of group) {
@@ -2313,7 +2319,7 @@
       }
     }
 
-    const MAX_POLL_ITERATIONS = 300;
+    const MAX_POLL_ITERATIONS = 900;
 
     function renderConceptsPreview(status) {
       if (!status.concepts?.length) return;
@@ -2323,10 +2329,12 @@
       const showInterp = bm === 'normal' || bm === 'skip-style';
       const showBypassBadge = bm === 'full-bypass';
       conceptsList.innerHTML = status.concepts.map((c, i) => {
-        const style = showStyle ? (c.style || status.assignedStyles?.[i] || '') : '';
+        const gen = (c.genIndex ?? 0) + 1;
+        const shot = (c.conceptIndex ?? i) + 1;
+        const style = showStyle ? (c.style || status.assignedStyles?.[c.genIndex] || '') : '';
         const interp = showInterp ? (c.interpretation || status.assignedInterpretations?.[i] || '') : '';
         return `<div class="concept-row">
-          <span class="concept-num">${String(i+1).padStart(2,'0')}</span>
+          <span class="concept-num">G${gen}.${String(shot).padStart(2,'0')}</span>
           <span class="concept-label">${esc(c.concept)}</span>
           ${showBypassBadge ? '<span class="concept-style" style="color:var(--text-dim);background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1)">BYPASS</span>' : ''}
           ${style ? `<span class="concept-style">${esc(style)}</span>` : ''}

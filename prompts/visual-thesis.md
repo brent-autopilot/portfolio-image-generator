@@ -168,7 +168,7 @@ RULES:
 - RECOGNIZABILITY TEST: Before finalizing any prompt, ask: if this image had no label, would a viewer identify the core subject from the fund name? If the style treatment makes the subject ambiguous or unrecognizable, dial back the style until the subject is unmistakable. The style serves the subject, never competes with it.
 - INTERPRETATION = COMPOSITION ONLY. External interpretation directives change shot type, environment, scale, or action of the anchor subject. They never replace the anchor with an abstract symbol (explosion, particle web, network diagram, breakthrough moment).
 - STYLE = MEDIUM ONLY. External style directives control rendering technique, never what appears in the scene.
-- ONE ANCHOR, THREE SHOTS. All concepts in a run share the same fund noun. Variation is photographic, not conceptual.
+- ONE ANCHOR. All concepts in a run share the same fund noun. Variation is photographic, not conceptual. Return exactly as many concepts as the user message requests.
 - FUND-IMAGE TEST. Would a portfolio manager immediately recognize this as their fund's literal subject? If not, the prompt failed.
 - No text, logos, UI, overlays.
 - No named emotions except the final mood line.

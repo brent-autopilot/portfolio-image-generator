@@ -141,10 +141,10 @@ if (!existsSync(ARCHIVE_DIR)) mkdirSync(ARCHIVE_DIR, { recursive: true });
 if (!existsSync(QUADRANT_DIR)) mkdirSync(QUADRANT_DIR, { recursive: true });
 
 const LEGNEXT_BASE = 'https://api.legnext.ai/api/v1';
-const NUM_CONCEPTS = 3;
-// Each concept is submitted this many times. Midjourney returns 4 images per
-// submission, so a run is 3 concepts × 3 rolls × 4 images = 36.
-const ROLLS_PER_CONCEPT = 3;
+// Three generations (profile + style reference). Each one gets nine concepts.
+// Midjourney returns 4 images per concept, so a run is 3 × 9 × 4 = 108 images.
+const NUM_GENS = 3;
+const CONCEPTS_PER_GEN = 9;
 const MJ_CONCURRENCY = 3;
 const JOB_TTL_MS = 30 * 60 * 1000;
 const JOB_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
@@ -566,46 +566,50 @@ keywords must be concrete nouns that must appear in image prompts (include plura
   throw new Error(`Failed to extract locked anchor after retry. Raw: ${lastRaw.slice(0, 200)}`);
 }
 
-function buildDirectivesParagraph(mode, styles, interpretations) {
-  const useStyles = styles.length > 0;
+function buildGenDirectives(style, interpretations) {
+  const useStyle = !!style;
   const useInterps = interpretations.length > 0;
   let directivesParagraph = '';
   let extraReturnFields = '';
+  const rules = `
+CRITICAL RULES:
+- Style controls rendering only. If a style mentions objects, apply as texture/material to the anchor subject.
+- Composition changes framing of the anchor subject only. If composition could be satisfied without showing the anchor noun, reject it and stay literal.
+- The locked anchor is the ONLY subject. No abstract metaphors, explosions, particle webs, or networks.
+- Each concept is a different shot. Do not repeat a composition.`;
 
-  if (useStyles && useInterps) {
-    const directives = styles
-      .map((s, i) => `  Concept ${i + 1} style: "${s}"\n  Concept ${i + 1} composition: "${interpretations[i]}"`)
+  if (useStyle && useInterps) {
+    const compositions = interpretations
+      .map((interp, i) => `  Concept ${i + 1} composition: "${interp}"`)
       .join('\n');
-
-    directivesParagraph = `\n\nEach concept has a mandatory visual STYLE and mandatory COMPOSITION directive.
+    directivesParagraph = `\n\nEvery concept in this generation shares one style. Each concept has its own composition.
 
 Style = medium, technique, lighting, texture — HOW it renders. Never what the subject is.
 Composition = camera angle, environment, scale, framing of the LOCKED ANCHOR — never a new subject.
 
-${directives}
+Style for every concept: "${style}"
 
-CRITICAL RULES:
-- Style controls rendering only. If a style mentions objects, apply as texture/material to the anchor subject.
-- Composition changes framing of the anchor subject only. If composition could be satisfied without showing the anchor noun, reject it and stay literal.
-- The locked anchor is the ONLY subject. No abstract metaphors, explosions, particle webs, or networks.`;
-
-    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": the assigned composition directive (echo it back exactly)';
-  } else if (useStyles) {
-    const directives = styles.map((s, i) => `  Concept ${i + 1} style: "${s}"`).join('\n');
-    directivesParagraph = `\n\nEach concept has a mandatory visual style (rendering treatment only):\n\n${directives}\n\nStyle controls HOW the anchor looks, never WHAT the subject is.`;
+${compositions}
+${rules}`;
+    extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)\n- "interpretation": that concept\'s composition directive (echo it back exactly)';
+  } else if (useStyle) {
+    directivesParagraph = `\n\nEvery concept uses this visual style (rendering treatment only): "${style}"\n\nStyle controls HOW the anchor looks, never WHAT the subject is. The shots themselves must still differ.`;
     extraReturnFields = '\n- "style": the assigned style directive (echo it back exactly)';
   } else if (useInterps) {
-    const directives = interpretations.map((interp, i) => `  Concept ${i + 1} composition: "${interp}"`).join('\n');
-    directivesParagraph = `\n\nEach concept has a mandatory composition directive (framing of the anchor only):\n\n${directives}`;
-    extraReturnFields = '\n- "interpretation": the assigned composition directive (echo it back exactly)';
+    const compositions = interpretations
+      .map((interp, i) => `  Concept ${i + 1} composition: "${interp}"`)
+      .join('\n');
+    directivesParagraph = `\n\nEach concept has a mandatory composition directive (framing of the anchor only):\n\n${compositions}`;
+    extraReturnFields = '\n- "interpretation": that concept\'s composition directive (echo it back exactly)';
   }
 
   return { directivesParagraph, extraReturnFields };
 }
 
 function buildThemeUserMessage({
-  job, thesis, lockedAnchor, directivesParagraph, extraReturnFields, styleContext, isFullBypass, retryNote,
+  job, thesis, lockedAnchor, directivesParagraph, extraReturnFields, styleContext, isFullBypass, retryNote, conceptCount,
 }) {
+  const count = conceptCount;
   const keywordList = buildKeywordList(lockedAnchor.noun, lockedAnchor.keywords).join(', ');
 
   if (isFullBypass) {
@@ -615,9 +619,9 @@ Thesis: "${thesis}"
 LOCKED ANCHOR: "${lockedAnchor.noun}" — keywords that MUST appear in every prompt: ${keywordList}
 ${retryNote || ''}
 
-Generate exactly ${NUM_CONCEPTS} simple literal Midjourney prompts. SAME anchor subject, different compositions/angles. No abstract metaphors.
+Generate exactly ${count} simple literal Midjourney prompts. SAME anchor subject, different compositions/angles. No abstract metaphors.
 
-Return ONLY a JSON array of exactly ${NUM_CONCEPTS} objects:
+Return ONLY a JSON array of exactly ${count} objects:
 - "anchor": must be "${lockedAnchor.noun}" exactly
 - "concept": 2-3 word shot label referencing the literal subject (e.g. "umbrella close-up")
 - "prompt": 15-30 words, comma-separated fragments, anchor dominant`;
@@ -627,12 +631,12 @@ Return ONLY a JSON array of exactly ${NUM_CONCEPTS} objects:
   FUND NAME: "${job.fundName}"
   FUND THESIS: "${thesis}"
 
-LOCKED ANCHOR (non-negotiable — same subject in ALL ${NUM_CONCEPTS} prompts):
+LOCKED ANCHOR (non-negotiable — same subject in ALL ${count} prompts):
   noun: "${lockedAnchor.noun}"
   required keywords in every prompt: ${keywordList}
 ${retryNote || ''}
 
-Generate exactly ${NUM_CONCEPTS} concepts depicting the SAME locked anchor subject. Each uses a different composition, angle, environment, or moment. The anchor noun must be unmistakable and dominant. No abstract metaphors. No new subjects.
+Generate exactly ${count} concepts depicting the SAME locked anchor subject. Each uses a different composition, angle, environment, or moment. The anchor noun must be unmistakable and dominant. No abstract metaphors. No new subjects.
 
 HIERARCHY:
 1. LOCKED ANCHOR — what is in the image (non-negotiable)
@@ -641,16 +645,16 @@ HIERARCHY:
 
 PROMPT LENGTH: 20-45 words. Evocative comma-separated fragments. Every prompt must contain at least one required keyword.${styleContext}
 
-Return ONLY a JSON array of exactly ${NUM_CONCEPTS} objects:
+Return ONLY a JSON array of exactly ${count} objects:
 - "anchor": must be "${lockedAnchor.noun}" exactly
 - "concept": 2-3 word shot label (e.g. "umbrella close-up", "rain street") — literal subject only, never abstract
 - "prompt": Midjourney prompt — anchor dominant${extraReturnFields}`;
 }
 
-async function callClaudeForConcepts(systemPrompt, userMessage) {
+async function callClaudeForConcepts(systemPrompt, userMessage, count) {
   const resp = await getAnthropic().messages.create({
     model: THEME_MODEL,
-    max_tokens: 1024,
+    max_tokens: 4096,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   });
@@ -663,7 +667,7 @@ async function callClaudeForConcepts(systemPrompt, userMessage) {
 
   return concepts
     .filter((c) => c && typeof c.concept === 'string' && typeof c.prompt === 'string')
-    .slice(0, NUM_CONCEPTS);
+    .slice(0, count);
 }
 
 async function generateThemes(job) {
@@ -683,68 +687,101 @@ async function generateThemes(job) {
   const isFullBypass = mode === 'full-bypass';
 
   const styles = useStyles
-    ? (job.manualStyle ? Array(NUM_CONCEPTS).fill(job.manualStyle) : pickRandomStyles(NUM_CONCEPTS))
-    : [];
-  const interpretations = useInterps
-    ? (job.manualInterpretation ? Array(NUM_CONCEPTS).fill(job.manualInterpretation) : pickRandomInterpretations(NUM_CONCEPTS))
-    : [];
+    ? (job.manualStyle ? Array(NUM_GENS).fill(job.manualStyle) : pickRandomStyles(NUM_GENS))
+    : Array(NUM_GENS).fill(null);
+  const interpretationSets = useInterps
+    ? (job.manualInterpretation
+      ? Array.from({ length: NUM_GENS }, () => Array(CONCEPTS_PER_GEN).fill(job.manualInterpretation))
+      : Array.from({ length: NUM_GENS }, () => pickRandomInterpretations(CONCEPTS_PER_GEN)))
+    : Array.from({ length: NUM_GENS }, () => []);
 
-  job.assignedStyles = styles;
-  job.assignedInterpretations = interpretations;
-  if (styles.length) console.log(`[job ${job.id}] Assigned styles:`, styles);
-  if (interpretations.length) console.log(`[job ${job.id}] Assigned interpretations:`, interpretations);
+  job.assignedStyles = styles.map((style) => style || null);
+  job.assignedInterpretations = interpretationSets.flat();
+  if (useStyles) console.log(`[job ${job.id}] Assigned styles:`, styles);
+  if (useInterps) console.log(`[job ${job.id}] Assigned interpretations:`, interpretationSets.map((set) => set.length));
   if (isFullBypass) console.log(`[job ${job.id}] Full bypass — style + interpretation banks disabled`);
 
   const lockedAnchor = await extractLockedAnchor(job, thesis);
   emitJobUpdate(job);
 
-  const { directivesParagraph, extraReturnFields } = buildDirectivesParagraph(mode, styles, interpretations);
-  let systemPrompt = isFullBypass
+  const systemPrompt = isFullBypass
     ? `You are a visual prompt distiller for Midjourney. Given a locked literal anchor subject, write concrete prompts. Never abstract.`
     : THEME_SYSTEM_PROMPT;
 
+  const batches = await Promise.all(styles.map((style, genIndex) => generateConceptsForGen(job, {
+    thesis,
+    lockedAnchor,
+    styleContext,
+    isFullBypass,
+    systemPrompt,
+    style,
+    interpretations: interpretationSets[genIndex],
+    genIndex,
+  })));
+
+  job.concepts = batches.flat();
+  console.log(`[job ${job.id}] [${mode}] Generated ${job.concepts.length} anchor-locked concepts:`);
+  job.concepts.forEach((c, i) => console.log(`  ${i + 1}. [gen ${c.genIndex + 1}] [${c.concept}] ${c.prompt}`));
+
+  return job.concepts;
+}
+
+async function generateConceptsForGen(job, {
+  thesis, lockedAnchor, styleContext, isFullBypass, systemPrompt, style, interpretations, genIndex,
+}) {
+  const { directivesParagraph, extraReturnFields } = buildGenDirectives(style, interpretations);
   let retryNote = '';
   let valid = [];
   let lastValidationErrors = [];
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const userMessage = buildThemeUserMessage({
-      job, thesis, lockedAnchor, directivesParagraph, extraReturnFields, styleContext, isFullBypass, retryNote,
+      job,
+      thesis,
+      lockedAnchor,
+      directivesParagraph,
+      extraReturnFields,
+      styleContext,
+      isFullBypass,
+      retryNote,
+      conceptCount: CONCEPTS_PER_GEN,
     });
 
-    const concepts = await callClaudeForConcepts(systemPrompt, userMessage);
+    const concepts = await callClaudeForConcepts(systemPrompt, userMessage, CONCEPTS_PER_GEN);
     if (concepts.length === 0) {
-      throw new Error('Claude returned no valid concepts');
+      throw new Error(`Claude returned no valid concepts for gen ${genIndex + 1}`);
     }
 
     const validation = validateConcepts(lockedAnchor, concepts, {
-      expectedCount: NUM_CONCEPTS,
+      expectedCount: CONCEPTS_PER_GEN,
       requireAnchorField: true,
     });
     if (validation.valid) {
       valid = concepts;
       if (attempt > 0) {
-        console.warn(`[job ${job.id}] Anchor validation passed on retry ${attempt + 1}`);
+        console.warn(`[job ${job.id}] Gen ${genIndex + 1} anchor validation passed on retry ${attempt + 1}`);
       }
       break;
     }
 
     lastValidationErrors = validation.errors;
-    console.warn(`[job ${job.id}] Anchor validation failed (attempt ${attempt + 1}):`, validation.errors.join('; '));
+    console.warn(`[job ${job.id}] Gen ${genIndex + 1} anchor validation failed (attempt ${attempt + 1}):`, validation.errors.join('; '));
     retryNote = `\n\nVALIDATION FAILED — fix these errors:\n${validation.errors.map((e) => `- ${e}`).join('\n')}\nEvery prompt MUST contain: ${validation.keywords.join(', ')}. Every anchor MUST be "${lockedAnchor.noun}".`;
   }
 
   if (valid.length === 0) {
-    const msg = `Anchor validation failed after retry: ${lastValidationErrors.join('; ')}`;
+    const msg = `Gen ${genIndex + 1} anchor validation failed after retry: ${lastValidationErrors.join('; ')}`;
     console.error(`[job ${job.id}] ${msg}`);
     throw new Error(msg);
   }
 
-  job.concepts = valid;
-  console.log(`[job ${job.id}] [${mode}] Generated ${job.concepts.length} anchor-locked concepts:`);
-  job.concepts.forEach((c, i) => console.log(`  ${i + 1}. [${c.concept}] ${c.prompt}`));
-
-  return job.concepts;
+  return valid.map((concept, index) => ({
+    ...concept,
+    style: style || concept.style || null,
+    interpretation: interpretations[index] || concept.interpretation || null,
+    genIndex,
+    conceptIndex: index,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1050,13 +1087,18 @@ async function buildImagesFromGenResult(grid, task, gridIndex, profiles, job) {
   }));
 }
 
+function srefEntryForGen(srefs, genIndex) {
+  if (genIndex < 1 || !srefs.length) return null;
+  return srefs[(genIndex - 1) % srefs.length] || null;
+}
+
 async function mapPool(items, limit, fn) {
   const results = new Array(items.length);
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
       const idx = next++;
-      results[idx] = await fn(items[idx]);
+      results[idx] = await fn(items[idx], idx);
     }
   });
   await Promise.all(workers);
@@ -1066,12 +1108,12 @@ async function mapPool(items, limit, fn) {
 async function generateAllImages(job, { onGenComplete } = {}) {
   setJobStage(job, 'generating_images');
 
-  const profiles = pickRandomProfiles(NUM_CONCEPTS);
+  const profiles = pickRandomProfiles(NUM_GENS);
   const rpd = process.env.RAILWAY_PUBLIC_DOMAIN;
   const host = rpd || process.env.HOST || `localhost:${PORT}`;
   const baseUrl = rpd ? `https://${host}` : `http://${host}`;
 
-  // Pick 2 distinct srefs for Gen 2 and Gen 3; verify reachability in parallel
+  // Pick 2 distinct srefs. Gen 1 stays bare; Gen 2 and Gen 3 each get one.
   const SREF_COUNT = 2;
   const srefCandidates = pickRandomSrefs(SREF_COUNT, baseUrl);
   let srefs = []; // verified srefs, indexed 0 → Gen 2, 1 → Gen 3
@@ -1093,27 +1135,26 @@ async function generateAllImages(job, { onGenComplete } = {}) {
 
   job.assignedProfiles = profiles.map((p) => p.label);
   job.assignedSrefs = srefs.filter(Boolean).map((s) => s.name);
-  job.actualSrefs = [null, ...srefs.map((s) => s ? s.name : null)];
+  job.actualSrefs = profiles.map((_, i) => srefEntryForGen(srefs, i)?.name || null);
   job.profileTags = profiles.map((p) => p.tag);
   console.log(`[job ${job.id}] Profiles: ${profiles.map((p) => p.label).join(', ')}`);
 
-  // Each concept is rolled ROLLS_PER_CONCEPT times with the same prompt, profile,
-  // and sref. In-flight Midjourney jobs stay at the previous 3-wide pace.
+  // One Midjourney grid per concept. Gen 1 has no sref. Gen 2 and Gen 3 each
+  // use one verified style reference, shared by that gen's nine concepts.
+  // Three jobs run at a time.
   let gridIndexCounter = 0;
   let completedGrids = 0;
-  const srefKept = Array(job.concepts.length).fill(false);
 
   const processGenResult = async (r) => {
     if (!r) return [];
 
-    const wantedSref = r.genIndex >= 1 && !!srefs[r.genIndex - 1];
+    const wantedSref = !!srefEntryForGen(srefs, r.genIndex);
     const srefLost = wantedSref && !r.usedSref;
-    if (wantedSref && r.usedSref) srefKept[r.genIndex] = true;
 
     const task = {
       concept: r.concept,
       genIndex: r.genIndex,
-      variationIndex: r.variationIndex,
+      variationIndex: r.concept.conceptIndex ?? 0,
       usedSref: r.usedSref,
       srefLost,
     };
@@ -1129,49 +1170,46 @@ async function generateAllImages(job, { onGenComplete } = {}) {
     return images;
   };
 
-  const rolls = [];
-  for (let i = 0; i < job.concepts.length; i++) {
-    for (let v = 0; v < ROLLS_PER_CONCEPT; v++) {
-      rolls.push({ concept: job.concepts[i], genIndex: i, variationIndex: v });
+  async function runConcept(concept, genIndex) {
+    const opts = { profile: profiles[genIndex]?.tag };
+    const srefEntry = srefEntryForGen(srefs, genIndex);
+    if (srefEntry) {
+      opts.sref = srefEntry.url;
+      opts.sw = STYLE_WEIGHT;
     }
-  }
-
-  async function runRoll(roll) {
-    const { concept: c, genIndex: i, variationIndex: v } = roll;
-    const opts = { profile: profiles[i].tag };
-    if (i >= 1) {
-      const srefEntry = srefs[i - 1];
-      if (srefEntry) {
-        opts.sref = srefEntry.url;
-        opts.sw = STYLE_WEIGHT;
-      }
-    }
-    const label = `job ${job.id} Gen ${i + 1} roll ${v + 1}`;
+    const label = `job ${job.id} Gen ${genIndex + 1}`;
     try {
-      const result = await submitAndPollWithSrefRetry(c.prompt, opts, label);
-      return processGenResult({ ...result, concept: c, genIndex: i, variationIndex: v });
+      const result = await submitAndPollWithSrefRetry(concept.prompt, opts, label);
+      return processGenResult({ ...result, concept, genIndex });
     } catch (err) {
       console.error(`[${label}] Failed entirely: ${err.message}`);
       return [];
     }
   }
 
-  const genImageBatches = await mapPool(rolls, MJ_CONCURRENCY, runRoll);
+  const genImageBatches = await mapPool(
+    job.concepts,
+    MJ_CONCURRENCY,
+    (concept) => runConcept(concept, concept.genIndex ?? 0),
+  );
   const allImages = genImageBatches.flat();
 
-  for (let i = 1; i < job.concepts.length; i++) {
-    if (srefs[i - 1] && !srefKept[i]) job.actualSrefs[i] = null;
+  // A single concept can lose its sref and fall back. Keep the gen's sref
+  // name when any of its concepts still used it.
+  for (let gi = 0; gi < profiles.length; gi++) {
+    const kept = allImages.some((img) => img.genIndex === gi && img.srefName);
+    if (!kept) job.actualSrefs[gi] = null;
   }
 
-  job.mjTaskIds = rolls.map((roll) => `gen${roll.genIndex + 1}-roll${roll.variationIndex + 1}`);
-  console.log(`[job ${job.id}] ${completedGrids}/${rolls.length} grids complete, ${allImages.length} images`);
+  job.mjTaskIds = job.concepts.map((c, i) => `gen${i + 1}:${c.concept || c.prompt?.slice(0, 40) || 'unknown'}`);
+  console.log(`[job ${job.id}] ${completedGrids}/${job.concepts.length} grids complete, ${allImages.length} images`);
 
   if (allImages.length === 0) {
     throw new Error('All Midjourney image generations failed');
   }
 
-  if (completedGrids < rolls.length) {
-    const msg = `Only ${completedGrids}/${rolls.length} image generations succeeded`;
+  if (completedGrids < job.concepts.length) {
+    const msg = `Only ${completedGrids}/${job.concepts.length} image generations succeeded`;
     job.warnings.push(msg);
     console.warn(`[job ${job.id}] ${msg}`);
   }
@@ -1647,17 +1685,18 @@ app.post('/api/rate', (req, res) => {
     return res.status(400).json({ error: 'Component must be styles, interpretations, or srefs' });
   }
   const gi = parseInt(genIndex, 10);
-  if (isNaN(gi) || gi < 0 || gi >= NUM_CONCEPTS) {
+  if (isNaN(gi) || gi < 0 || gi >= NUM_GENS) {
     return res.status(400).json({ error: 'Invalid genIndex' });
   }
 
   const job = jobs.get(jobId);
   if (!job) return res.status(404).json({ error: 'Job not found or session expired' });
 
-  const concept = job.concepts?.[gi];
+  const genConcepts = (job.concepts || []).filter((c) => c.genIndex === gi);
+  const interpretations = [...new Set(genConcepts.map((c) => c.interpretation).filter(Boolean))];
   let key = null;
-  if (component === 'styles') key = concept?.style || null;
-  else if (component === 'interpretations') key = concept?.interpretation || null;
+  if (component === 'styles') key = job.assignedStyles?.[gi] || genConcepts[0]?.style || null;
+  else if (component === 'interpretations') key = interpretations.length === 1 ? interpretations[0] : null;
   else if (component === 'srefs') key = job.actualSrefs?.[gi] || null;
 
   if (!key) return res.status(400).json({ error: 'Component not available for this generation' });
